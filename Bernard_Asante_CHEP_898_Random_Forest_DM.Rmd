@@ -1,0 +1,618 @@
+---
+title: "Random Forest"
+author: "Bernard Asante"
+date: "2024-09-23"
+output:
+      html_document:
+        toc: true
+        toc_float: true 
+        toc_depth: 3
+---
+
+# **Loading libraries**
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+library(sjPlot)
+library(C50)
+library(finalfit)
+library(knitr)
+library(gtsummary)
+library(mlbench)
+library(vip)
+library(rsample)
+library(rpart.plot)
+library(tune)
+library(recipes)
+library(yardstick)
+library(parsnip)
+library(glmnet)
+library(themis)
+library(microbenchmark)
+```
+
+
+# **Reading in data**
+
+```{r}
+data <- read_csv("mice_all_imp.csv")
+
+data <- data %>% mutate_at(3, factor)
+data <- data %>% mutate_at(5:6, factor)
+data <- data %>% mutate_at(8:12, factor)
+data <- data %>% mutate_at(15:81, factor)
+data <- data %>% mutate_at(83:93, factor)
+
+data$ID <- NULL
+data$ADM_STUDY_ID <- NULL
+```
+
+# **Exploratory Data Analysis on predictors**
+
+Preparing diabetes data
+
+DIS_DIAB_EVER DICTIONARY 
+0 - "Never had diabetes"
+1-  "Ever had diabetes"
+2 - "Presumed-Never had diabetes"
+
+```{r}
+table(data$DIS_DIAB_EVER)
+```
+ 
+ 
+
+The next step is to recode DIS_DIAB_EVER into a dichotomous variables; Yes or No
+
+```{r}
+data <- data %>%
+	mutate(diabetes = case_when(
+		DIS_DIAB_EVER == 0 ~ "No",
+		DIS_DIAB_EVER == 1 ~ "Yes",
+		DIS_DIAB_EVER == 2 ~ "No")) %>%
+		mutate(diabetes = as.factor(diabetes))
+
+data$DIS_DIAB_EVER <- NULL
+
+```
+
+
+## Summary statistics of diabetes variable 
+
+```{r}
+data$diabetes %>% 
+  summary()
+```
+
+## Calculating proportion of diabetes response
+
+```{r}
+prop_diabetes <- prop.table(table(data$diabetes)) * 100
+
+prop_diabetes
+```
+
+I can see a high proportion of "No" responses(92.4%) compared to Yes with 7.56%. This imbalance is because I recoded 0 and 2 responses as "NO". I need to upsample the Yes responses to get a better model.   
+
+## Visualizing Diabetes response
+
+```{r}
+data %>% 
+  count(diabetes) %>% 
+  ggplot(aes(x = diabetes, y = n, fill = diabetes))+
+  geom_col()  
+```
+
+
+
+## Simplifying the data
+
+
+```{r}
+data_small <- select(data, diabetes, SDC_AGE_CALC, SDC_EDU_LEVEL, PM_BMI_SR, WRK_FULL_TIME, SMK_CIG_EVER, SDC_INCOME, PA_TOTAL_SHORT, HS_ROUTINE_VISIT_EVER, PSE_ADULT_WRK_DURATION, DIS_RESP_SLEEP_APNEA_EVER, SDC_EDU_LEVEL_AGE, SDC_GENDER)
+```
+
+
+
+# **Random Forest Model**
+
+## Splitting the dataset
+
+```{r}
+set.seed(10)
+
+
+data_split <- initial_split(data, 
+                            strata = diabetes, 
+                            prop = 0.70)
+```
+
+
+## Training and Testing Data 
+
+```{r}
+train_data <- training(data_split)
+
+
+test_data  <- testing(data_split)
+
+
+```
+
+## Detecting core 
+
+```{r}
+cores <- parallel::detectCores()
+cores
+```
+
+
+## **Random forest model (Default hyperparameters)**
+
+### Default RF model
+
+```{r}
+rf_model_default <- rand_forest() %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+```
+
+
+### Building the recipe 
+
+```{r}
+rf_recipe_default <- recipe(diabetes ~ ., data = train_data) %>% 
+  step_smotenc(diabetes, over_ratio = 0.15) %>%  # Upsampling 
+  step_zv(all_predictors())
+```
+
+
+### Building workflow 
+
+```{r}
+rf_workflow_default <- workflow() %>% 
+  add_recipe(rf_recipe_default) %>% 
+  add_model(rf_model_default)
+
+rf_workflow_default
+```
+
+### Training the model 
+
+```{r}
+rf_workflow_default_fit <- rf_workflow_default %>% 
+  fit(train_data)
+```
+
+
+### Predicting  Test Data 
+
+#### Class Prediction 
+
+```{r}
+rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, type = "class")
+
+rf_predict_default %>% 
+  head()
+```
+
+#### Probability prediction
+
+```{r}
+rf_default_roc <- predict(rf_workflow_default_fit, new_data = test_data, type = "prob") %>% 
+  bind_cols(test_data)
+
+rf_default_roc %>% 
+  select(.pred_No,.pred_Yes,diabetes) %>% 
+  head()
+```
+
+
+
+### combining test data and predictions
+
+```{r}
+# This code is to add the predictions to the test_data
+rf_predict_default <- rf_predict_default %>% 
+  cbind(test_data)
+
+rf_predict_default <- rf_predict_default %>% 
+  select(.pred_class,diabetes)
+
+rf_predict_default %>% 
+  glimpse()
+  
+```
+
+
+### Model Evaluation
+
+#### Calculating metrics 
+
+```{r}
+default_accuracy <- accuracy(rf_predict_default, truth = diabetes, estimate = .pred_class)
+default_sensitivity <- sens(rf_predict_default, truth = diabetes, estimate = .pred_class)
+default_specificity <- spec(rf_predict_default, truth = diabetes, estimate = .pred_class)
+default_precision <- precision(rf_predict_default, truth = diabetes, estimate = .pred_class)
+default_f_score <- f_meas(rf_predict_default, truth = diabetes, estimate = .pred_class)
+```
+
+#### Combine metrics into a data frame
+
+```{r}
+default_metrics <- data.frame(
+  accuracy_default = default_accuracy$.estimate,
+  sensitivity_default = default_sensitivity$.estimate,
+  specificity_default = default_specificity$.estimate,
+  precision_default = default_precision$.estimate,
+  f_score_default = default_f_score$.estimate
+)
+
+default_metrics %>% 
+  head()
+```
+
+#### Changing shape of dataframe 
+
+```{r}
+default_metrics_long <- default_metrics %>% 
+  pivot_longer(cols = accuracy_default:f_score_default,
+               names_to = "metrics",
+               values_to = "estimates")
+
+default_metrics_long
+```
+
+### Roc_Curve for default 
+
+```{r}
+roc_curves_default  <- rf_default_roc %>%
+  roc_curve(truth = diabetes, .pred_No) %>% 
+  autoplot()
+
+roc_curves_default
+```
+
+
+## **Random forest model (Hyperparameters tunning)**
+
+### Building Tuned RF model
+
+```{r}
+rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = 1) %>% 
+              set_engine("ranger", num.threads = cores) %>% 
+              set_mode("classification")
+```
+
+
+
+### Building the Recipe
+
+```{r}
+rf_recipe <- 
+  recipe(diabetes ~ ., data = train_data) %>% 
+  step_smotenc(diabetes,over_ratio = 0.15) %>% 
+  step_zv(all_predictors()) 
+```
+
+### Building  a workflow
+
+```{r}
+rf_workflow <- 
+        workflow() %>% 
+        add_model(rf_model) %>% 
+        add_recipe(rf_recipe)
+
+rf_workflow
+```
+
+### Hyperparameter tunning 
+
+```{r}
+set.seed(100)
+
+folds <- vfold_cv(train_data, v = 10) 
+
+rf_grid <- grid_regular(
+              mtry(range = c(1, 20)), 
+              min_n(range = c(5, 50)),
+              levels = 4
+            )
+
+rf_grid
+
+
+rf_tune <- tune_grid(
+                rf_workflow,
+                resamples = folds,
+                grid = rf_grid, 
+                control = control_resamples(save_pred = TRUE, 
+                                                  verbose = FALSE))
+
+rf_tune
+```
+
+### Evaluating  Tunning metrics 
+```{r}
+tune_metrics <- rf_tune %>% 
+  collect_metrics()
+
+tune_metrics %>% 
+  head()
+```
+
+#### Filtering only accuracy 
+
+```{r}
+
+
+tune_metrics <- tune_metrics %>% 
+  filter(.metric == "accuracy")
+
+tune_metrics %>% 
+  head()
+```
+We are only interested in mean,min_n and mtry
+
+#### Selecting relevant variables  
+
+```{r}
+tune_long <- tune_metrics %>%
+  select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) 
+
+tune_long %>%  
+  head()
+```
+
+
+### Visualizing Tuned  hyperparameters 
+
+```{r}
+ggplot( tune_long, aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "Accuracy")
+```
+
+
+
+From the plot, the best tuned model will have mtry of 1 and min_n of 50 
+
+### Selecting best tuned model 
+
+```{r}
+rf_best <- 
+  rf_tune %>% 
+  select_best(metric = "accuracy")
+
+rf_best  # we know the best model has 1 mtry and 50 min_n
+```
+### Finalizing the best model 
+
+```{r}
+final_rf_model <- finalize_model(rf_model, rf_best)
+```
+
+### Creating final workflow
+ 
+```{r}
+rf_workflow_final <- workflow() %>% 
+  add_model(final_rf_model) %>% 
+  add_recipe(rf_recipe) 
+```
+
+### Training the final Model 
+
+```{r}
+rf_workflow_final_fit <- rf_workflow_final %>% 
+  fit(train_data)
+
+rf_workflow_final_fit
+```
+
+### Prediciting test data 
+
+#### Class Prediction
+
+```{r}
+final_model_predict <- predict(rf_workflow_final_fit,new_data = test_data) %>% 
+  bind_cols(test_data)
+
+final_model_predict<- final_model_predict  %>%
+  select(.pred_class, diabetes)
+
+final_model_predict %>% 
+  head()
+```
+
+#### Probabiltiy prediciton 
+
+```{r}
+rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "prob") %>% 
+  bind_cols(test_data)
+```
+
+
+
+
+### Metrics on Tuned Models
+
+#### Confusion Matrix
+
+
+```{r}
+conf_mat(final_model_predict, truth = diabetes,
+         estimate = .pred_class)
+```
+
+#### Accuracy
+
+
+```{r}
+accuracy_tuned <- accuracy(final_model_predict, truth = diabetes,
+         estimate = .pred_class)
+
+accuracy_tuned
+```
+
+#### Sensitivity
+
+```{r}
+sensitivity_tuned <- sens(final_model_predict, truth = diabetes,
+         estimate = .pred_class)
+
+sensitivity_tuned
+```
+
+#### Specificity
+
+```{r}
+specificity_tuned <- spec(final_model_predict, truth = diabetes,
+         estimate = .pred_class)
+
+specificity_tuned
+```
+
+#### F1 Score
+
+```{r}
+f1_score_tuned <- f_meas(final_model_predict, truth = diabetes,
+         estimate = .pred_class)
+
+f1_score_tuned
+```
+
+#### Precision
+
+```{r}
+precision_tuned  <- precision(final_model_predict, truth = diabetes,
+         estimate = .pred_class) 
+
+precision_tuned
+```
+
+
+#### Combine metrics into a data frame
+
+```{r}
+tuned_metrics <- data.frame(
+  accuracy_tuned = accuracy_tuned$.estimate,
+  sensitivity_tuned = sensitivity_tuned$.estimate,
+  specificity_tuned = specificity_tuned$.estimate,
+  precision_tuned= precision_tuned$.estimate,
+  f_score_tuned = f1_score_tuned$.estimate
+)
+
+tuned_metrics %>% 
+  head()
+```
+
+
+
+#### Changing shape of dataframe 
+
+```{r}
+tuned_metrics_long <- tuned_metrics %>% 
+  pivot_longer(cols = accuracy_tuned:f_score_tuned,
+               names_to = "metrics",
+               values_to = "estimates")
+
+tuned_metrics_long
+```
+
+
+### Variable Importance
+
+```{r}
+tree_prep <- prep(rf_recipe)
+
+final_rf_model %>%
+  set_engine("ranger", importance = "permutation") %>%
+  fit(diabetes ~ .,
+    data = juice(tree_prep)) %>%
+  vip(geom = "point")
+```
+
+
+### Roc Curve for tuned 
+
+```{r}
+roc_curves_tuned  <- rf_tuned_roc %>%
+  yardstick::roc_curve(truth = diabetes, .pred_No) %>% 
+  autoplot()
+
+roc_curves_tuned
+```
+
+
+## Default and Tuned Model Comparison 
+
+```{r}
+tuned_metrics_long
+
+default_metrics_long
+```
+
+```{r}
+metrics_combined <- bind_rows(tuned_metrics_long, default_metrics_long)
+
+metrics_combined %>% 
+  glimpse()
+```
+
+### Accuracy Comparison
+
+```{r}
+accuracy_compare <- metrics_combined %>% 
+  filter(metrics %in% c("accuracy_tuned", "accuracy_default"))
+```
+
+#### Visualizing accuracy comparison 
+```{r, fig.width=10, fig.height= 3}
+ggplot(data = accuracy_compare, aes(x = metrics, y = estimates))+
+  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
+  geom_point(size = 4, colour = "#a13")+
+  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
+  coord_flip()
+```
+### sensitivity Comparison
+
+```{r}
+sensitivity_compare <- metrics_combined %>% 
+  filter(metrics %in% c("sensitivity_tuned", "sensitivity_default"))
+```
+
+#### Visualizing sensitivity comparison
+
+```{r, fig.width=10, fig.height= 3}
+ggplot(data = sensitivity_compare, aes(x = metrics, y = estimates))+
+  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
+  geom_point(size = 4, colour = "#a13")+
+  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
+  coord_flip()
+```
+
+
+### Precision Comparison
+
+```{r}
+precision_compare <- metrics_combined %>% 
+  filter(metrics %in% c("precision_tuned", "precision_default"))
+```
+
+#### Visualizing precision comparison
+
+```{r, fig.width=10, fig.height= 3}
+ggplot(data = precision_compare, aes(x = metrics, y = estimates))+
+  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
+  geom_point(size = 4, colour = "#a13")+
+  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
+  coord_flip()
+```
+
