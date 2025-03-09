@@ -53,30 +53,36 @@ data$ADM_STUDY_ID <- NULL
 
 # **Exploratory Data Analysis on predictor**
 
-Preparing diabetes variable. This will be used as an outcome variable
+Preparing gen_health variable. This will be used as an outocome variable
 
-from the data dictionary, DIS_DIAB_EVER DICTIONARY has 3 responses:
-0 - "Never had diabetes"
-1-  "Ever had diabetes"
-2 - "Presumed-Never had diabetes"
-
+From the data dictionary, HS_GEN_HEALTH has 4 responses:
+1 - "Poor"
+2 - "fair"
+3-  "good"
+4 - "Very good"
+5- "Excellent"
 ```{r}
-table(data$DIS_DIAB_EVER)
+table(data$	HS_GEN_HEALTH)
 ```
- From the can path dataset dictionary, 0 and 2 are almost the same. I want to recode them into binary where 0 and 2 will be recoded as "NO" and 1 recoded as "Yes"
+I want to recode the variables into 3 categories : "poor health", "good health" and "excellent health"   
+From the can path dataset dictionary, 1 and 2 are almost the same. I want to recode them into "poor" category, recode 3 and 4 as "good" health and 5 as "excellent" health.
  
 
 ## Recoding Predictor variable 
 
 ```{r}
 data <- data %>%
-	mutate(diabetes = case_when(
-		DIS_DIAB_EVER == 0 ~ "No",
-		DIS_DIAB_EVER == 1 ~ "Yes",
-		DIS_DIAB_EVER == 2 ~ "No")) %>%
-		mutate(diabetes = as.factor(diabetes))
+	mutate(gen_health = case_when(
+		HS_GEN_HEALTH == 1 ~ 1,
+		HS_GEN_HEALTH == 2 ~ 1,
+		HS_GEN_HEALTH == 3 ~ 2,
+		HS_GEN_HEALTH == 4 ~ 3,	
+		HS_GEN_HEALTH == 5 ~ 3)) %>%
+		mutate(gen_health = as.factor(gen_health))
 
-data$DIS_DIAB_EVER <- NULL # Here I have to drop the main variable from the dataset
+table(data$HS_GEN_HEALTH, data$gen_health)
+
+data$HS_GEN_HEALTH <- NULL
 
 ```
 
@@ -84,30 +90,30 @@ data$DIS_DIAB_EVER <- NULL # Here I have to drop the main variable from the data
 ## Summary statistics of diabetes variable 
 
 ```{r}
-data$diabetes %>% 
+data$gen_health %>% 
   summary()
 ```
 I can see imbalance in the predictor variable. Let us do further analysis to understand it properly.
-Here I will calculate the proportions of YEs and NO responses. 
+Here I will calculate the proportions of 1, 2 and 3. 
 
 ## Calculating proportion of diabetes response
 
 ```{r}
-prop_diabetes <- prop.table(table(data$diabetes)) * 100
+prop_gen_health <- prop.table(table(data$gen_health)) * 100
 
-prop_diabetes
+prop_gen_health
 ```
 
-I can see a high proportion of "No" responses(92.4%) compared to Yes with 7.56%. This imbalance is because I recoded 0 and 2 responses as "NO". I need to upsample the Yes responses to get a better model. 
+I can see a high proportion of "3" responses(58.7%) compared to 2 with 31.04% and 1 as 10.212%. This imbalance is because I recoded 1 and 2 responses as "poor" both having the least responses compared to 3,4 and 5. I need to upsample the 1 responses to get a better model. 
 
-Synthetic Minority Over-sampling Technique(SMOTE) will be implemented to increase the Yes responses. 
+Synthetic Minority Over-sampling Technique(SMOTE) will be implemented to increase the "1" responses. 
 
 ## Visualizing Diabetes response
 
 ```{r}
 data %>% 
-  count(diabetes) %>% 
-  ggplot(aes(x = diabetes, y = n, fill = diabetes))+
+  count(gen_health) %>% 
+  ggplot(aes(x = gen_health, y = n, fill = gen_health))+
   geom_col()  
 ```
 This plot above shows the level of imbalance in the predictor variable
@@ -116,7 +122,7 @@ This plot above shows the level of imbalance in the predictor variable
 ## Simplifying the data
 
 ```{r}
-data_small <- select(data, diabetes, SDC_AGE_CALC, SDC_EDU_LEVEL, PM_BMI_SR, WRK_FULL_TIME, SMK_CIG_EVER, SDC_INCOME, PA_TOTAL_SHORT, HS_ROUTINE_VISIT_EVER, PSE_ADULT_WRK_DURATION, DIS_RESP_SLEEP_APNEA_EVER, SDC_EDU_LEVEL_AGE, SDC_GENDER)
+data_small <- select(data, gen_health, SDC_AGE_CALC, SDC_EDU_LEVEL, PM_BMI_SR, WRK_FULL_TIME, SMK_CIG_EVER, SDC_INCOME, PA_TOTAL_SHORT, HS_ROUTINE_VISIT_EVER, PSE_ADULT_WRK_DURATION, DIS_RESP_SLEEP_APNEA_EVER, SDC_EDU_LEVEL_AGE, SDC_GENDER)
 ```
 
 
@@ -130,11 +136,11 @@ set.seed(10)
 
 
 data_split <- initial_split(data, 
-                            strata = diabetes, 
+                            strata = gen_health, 
                             prop = 0.70)
 ```
 
-The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" esnures equal split of the predictor in test and training dataset 
+The main dataset has to be split into 70% for train data and 30% for test data. Strata = "gen_health" ensures equal split of the predictor in test and training dataset 
 
 ## Training and Testing Data 
 
@@ -154,7 +160,7 @@ cores <- parallel::detectCores()
 cores
 ```
 
-Detecting the core of the machine because I will be doing parrallel compution on 7 cores to facilitate the process. 
+Detecting the core of the machine because I will be doing parallel computing on 7 cores to facilitate the process. 
 
 
 ## **Random forest model (Default hyperparameters)**
@@ -168,7 +174,7 @@ mtry = NULL
 
 ```{r}
 rf_model_default <- rand_forest() %>% 
-  set_engine("ranger") %>% 
+  set_engine("ranger", num.threads = 8) %>% 
   set_mode("classification")
 ```
 
@@ -176,10 +182,37 @@ rf_model_default <- rand_forest() %>%
 ### Building the recipe 
 
 ```{r}
-rf_recipe_default <- recipe(diabetes ~ ., data = train_data) %>% 
-  step_smotenc(diabetes, over_ratio = 0.90) %>%  # Upsampling the predictor variable to overcome the imbalance in the dataset. Here I used 15% of NO responses.It can be 90% or any reasonable percentage.  
+rf_recipe_default <- recipe(gen_health ~ ., data = train_data) %>% 
+  step_smotenc(gen_health, over_ratio = 0.90) %>%  # Upsampling the minority class in the predictor variable to overcome the imbalance in the dataset. Here I used 50% of the majority responses.It can be 90% or any reasonable percentage.  
   step_zv(all_predictors())
 ```
+
+
+```{r}
+prepped_recipe <- prep(rf_recipe_default, training = train_data)
+
+baked_data <- bake(prepped_recipe, new_data = train_data)
+
+
+upsampled_distribution <- table(baked_data$gen_health) # This is to show the distribution
+
+upsampled_distribution
+
+data$gen_health %>% 
+  summary()
+
+upsample = data.frame(upsampled_distribution)
+upsample
+```
+
+
+```{r}
+ggplot(upsample,aes(x = Var1, y = Freq))+
+  geom_col()
+
+
+```
+
 
 
 ### Building workflow 
@@ -205,11 +238,12 @@ rf_workflow_default_fit <- rf_workflow_default %>%
 #### Class Prediction 
 
 ```{r}
-rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, type = "class")
+rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, type = "class")%>% 
+  bind_cols(test_data)
 
-rf_predict_default %>% 
-  head()
+
 ```
+
 This is to predict the class of the test_data using the trained model. This is good to assess metrics such as accuracy, precision etc. 
 
 
@@ -219,11 +253,13 @@ This is to predict the class of the test_data using the trained model. This is g
 rf_default_roc <- predict(rf_workflow_default_fit, new_data = test_data, type = "prob") %>% 
   bind_cols(test_data)
 
+
+
 rf_default_roc %>% 
-  select(.pred_No,.pred_Yes,diabetes) %>% 
+  select(.pred_1,.pred_2,.pred_3, gen_health) %>% 
   head()
 ```
-The probability predictions gives in probability(out of 1), how likely a prediction is to be NO or Yes. This predictions will be used for the ROC_CURVE later in the code
+The probability predictions gives in probability(out of 1), how likely a prediction is to be 1,2  or 3. 
 
 
 
@@ -232,10 +268,7 @@ The probability predictions gives in probability(out of 1), how likely a predict
 ```{r}
 
 rf_predict_default <- rf_predict_default %>% 
-  cbind(test_data)   # This code is to add the predictions to the test_data. One can use bind_cols to achieve the same results 
-
-rf_predict_default <- rf_predict_default %>% 
-  select(.pred_class,diabetes) # Selecting only the variables I need for the model evaluation
+  select(.pred_class,gen_health)
 
 rf_predict_default %>% 
   glimpse()
@@ -248,11 +281,11 @@ rf_predict_default %>%
 #### Calculating metrics 
 
 ```{r}
-default_accuracy <- accuracy(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_sensitivity <- sens(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_specificity <- spec(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_precision <- precision(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_f_score <- f_meas(rf_predict_default, truth = diabetes, estimate = .pred_class)
+default_accuracy <- accuracy(rf_predict_default, truth = gen_health, estimate = .pred_class)
+default_sensitivity <- sens(rf_predict_default, truth = gen_health, estimate = .pred_class)
+default_specificity <- spec(rf_predict_default, truth = gen_health, estimate = .pred_class)
+default_precision <- precision(rf_predict_default, truth = gen_health, estimate = .pred_class)
+default_f_score <- f_meas(rf_predict_default, truth = gen_health, estimate = .pred_class)
 ```
 
 #### Combine metrics into a data frame
@@ -281,28 +314,6 @@ default_metrics_long <- default_metrics %>%
 default_metrics_long
 ```
 
-### Roc_Curve for default 
-
-```{r}
-
-rf_default_roc$diabetes <- ifelse(rf_default_roc$diabetes == "Yes", 1, 0)
-
-roc_curve <- roc(rf_default_roc$diabetes, rf_default_roc$.pred_Yes)
-
-auc_value <- auc(roc_curve)
-
-```
-
-```{r}
-roc_curves_default  <- rf_default_roc %>%
-  roc_curve(truth = diabetes, .pred_No) %>% 
-  autoplot()
-
-roc_curves_default
-```
-
-This plot shows the trade-off between sensitivity (true positive rate) and 1 - specificity (false positive rate). The model has an AUC of about 0.80 which is very close to 1 indicating better predictive performance of the model to differentiate between true positives and false positives.
-
 
 ## **Random forest model (Hyperparameters tunning)**
 
@@ -321,8 +332,8 @@ Here the hyperparameters are tuned to see the best value for each parameter that
 
 ```{r}
 rf_recipe <- 
-  recipe(diabetes ~ ., data = train_data) %>% 
-  step_smotenc(diabetes,over_ratio = 0.15) %>% 
+  recipe(gen_health ~ ., data = train_data) %>% 
+  step_smotenc(gen_health,over_ratio = 0.90) %>% 
   step_zv(all_predictors()) 
 ```
 
@@ -365,6 +376,7 @@ rf_tune
 ```
 
 ### Evaluating  Tunning metrics 
+
 ```{r}
 tune_metrics <- rf_tune %>% 
   collect_metrics()
@@ -386,7 +398,7 @@ tune_metrics <- tune_metrics %>%
 tune_metrics %>% 
   head()
 ```
-We are only interested in mean,min_n, trees and mtry
+We are only interested in mean and the hyperparameter variables; min_n, trees and mtry
 
 #### Selecting relevant variables  
 
@@ -413,7 +425,7 @@ ggplot( tune_long, aes(value, mean, color = parameter)) +
 ```
 
 
-From the plot, the best tuned model will have mtry between one and 15, min_n of around 5  and trees of 100 
+From the plot, the best tuned model will have mtry of 7, min_n of around 5  and trees of 100 
 
 
 ### Selecting best tuned model 
@@ -426,7 +438,7 @@ rf_best <-
 rf_best  # we know the best model has 1 mtry and 50 min_n
 ```
 
-The best model is preprocessor1_model51 becuase it has the best hyperparamters values as seen on the plot. mtry 13,trees = 100 adn  min_n of 50 
+The best model is preprocessor1_model50 becuase it has the best hyperparamters values as seen on the plot. mtry 7,trees = 100 and  min_n of 5 
 
 ### Finalizing the best model 
 
@@ -460,7 +472,7 @@ final_model_predict <- predict(rf_workflow_final_fit,new_data = test_data) %>%
   bind_cols(test_data)
 
 final_model_predict<- final_model_predict  %>%
-  select(.pred_class, diabetes)
+  select(.pred_class, gen_health)
 
 final_model_predict %>% 
   head()
@@ -470,7 +482,11 @@ final_model_predict %>%
 
 ```{r}
 rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "prob") %>% 
-  bind_cols(test_data)
+  bind_cols(test_data) %>% 
+  select(.pred_1,.pred_2,.pred_3, gen_health)
+
+rf_tuned_roc %>% 
+  head()
 ```
 
 
@@ -481,7 +497,7 @@ rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "pr
 
 
 ```{r}
-conf_mat(final_model_predict, truth = diabetes,
+conf_mat(final_model_predict, truth = gen_health,
          estimate = .pred_class)
 ```
 
@@ -490,48 +506,55 @@ conf_mat(final_model_predict, truth = diabetes,
 
 
 ```{r}
-accuracy_tuned <- accuracy(final_model_predict, truth = diabetes,
+accuracy_tuned <- accuracy(final_model_predict, truth = gen_health,
          estimate = .pred_class)
 
 accuracy_tuned
 ```
-The RF tuned model has a very high accuracy of 92 % 
+The model has moderate accuracy (61.96%), meaning it predicts correctly most of the time, but it still makes mistakes.
 
 #### Sensitivity
 
 ```{r}
-sensitivity_tuned <- sens(final_model_predict, truth = diabetes,
+sensitivity_tuned <- sens(final_model_predict, truth = gen_health,
          estimate = .pred_class)
 
 sensitivity_tuned
 ```
+Sensitivity (49.5%) is lower indicating that the model misses a lot of actual cases creating a lot of false negatives 
+
 
 #### Specificity
 
 ```{r}
-specificity_tuned <- spec(final_model_predict, truth = diabetes,
+specificity_tuned <- spec(final_model_predict, truth = gen_health,
          estimate = .pred_class)
 
 specificity_tuned
 ```
+Sensitivity (49.5%) is lower than specificity (75.04%), indicating that the model misses a lot of actual cases but is better at avoiding false positives.
 
 #### F1 Score
 
 ```{r}
-f1_score_tuned <- f_meas(final_model_predict, truth = diabetes,
+f1_score_tuned <- f_meas(final_model_predict, truth = gen_health,
          estimate = .pred_class)
 
 f1_score_tuned
 ```
 
+The F1-score (50.44%) suggests the model is not optimally balanced in handling precision and sensitivity.
+
 #### Precision
 
 ```{r}
-precision_tuned  <- precision(final_model_predict, truth = diabetes,
+precision_tuned  <- precision(final_model_predict, truth = gen_health,
          estimate = .pred_class) 
 
 precision_tuned
 ```
+Precision (52.89%) is not very high, meaning that many of the model's positive predictions might be incorrect.
+
 
 
 #### Combine metrics into a data frame
@@ -561,7 +584,10 @@ tuned_metrics_long <- tuned_metrics %>%
 
 tuned_metrics_long
 ```
-
+The model has moderate accuracy (61.96%), meaning it predicts correctly most of the time, but it still makes mistakes.
+Sensitivity (49.5%) is lower than specificity (75.04%), indicating that the model misses a lot of actual cases but is better at avoiding false positives.
+Precision (52.89%) is not very high, meaning that many of the model's positive predictions might be incorrect.
+The F1-score (50.44%) suggests the model is not optimally balanced in handling precision and sensitivity.
 
 ### Variable Importance
 
@@ -570,21 +596,12 @@ tree_prep <- prep(rf_recipe)
 
 final_rf_model %>%
   set_engine("ranger", importance = "permutation") %>%
-  fit(diabetes ~ .,
+  fit(gen_health ~ .,
     data = juice(tree_prep)) %>%
   vip(geom = "point")
 ```
 
-
-### Roc Curve for tuned 
-
-```{r}
-roc_curves_tuned  <- rf_tuned_roc %>%
-  yardstick::roc_curve(truth = diabetes, .pred_No) %>% 
-  autoplot()
-
-roc_curves_tuned
-```
+The top three features influencing general health classification are income (SDC_INCOME), education level (SDC_EDUCATION), and history of high blood pressure (DIS_HBP_EVER), highlighting socioeconomic and medical factors' impact on health outcomes.
 
 
 ## Default and Tuned Model Comparison 
@@ -610,6 +627,7 @@ accuracy_compare <- metrics_combined %>%
 ```
 
 #### Visualizing accuracy comparison 
+
 ```{r, fig.width=10, fig.height= 3}
 ggplot(data = accuracy_compare, aes(x = metrics, y = estimates))+
   geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
