@@ -51,11 +51,12 @@ data$ID <- NULL
 data$ADM_STUDY_ID <- NULL
 ```
 
+
 # **Exploratory Data Analysis on predictor**
 
-Preparing diabetes variable. This will be used as an outcome variable
+Preparing diabetes variable. This will be used as an outcome variable.
 
-from the data dictionary, DIS_DIAB_EVER DICTIONARY has 3 responses:
+From the data dictionary, DIS_DIAB_EVER DICTIONARY has 3 responses:
 0 - "Never had diabetes"
 1-  "Ever had diabetes"
 2 - "Presumed-Never had diabetes"
@@ -80,10 +81,21 @@ data$DIS_DIAB_EVER <- NULL # Here I have to drop the main variable from the data
 
 ```
 
+## Checking levels
+
+```{r}
+levels(data$diabetes)
+```
+I will have to factor the level to make "Yes" at level one and "NO" at second level
+
 
 ## Summary statistics of diabetes variable 
 
 ```{r}
+
+data <- data %>% 
+  mutate(diabetes = factor(diabetes,
+                           levels = c("Yes", "No")))
 data$diabetes %>% 
   summary()
 ```
@@ -113,14 +125,6 @@ data %>%
 This plot above shows the level of imbalance in the predictor variable
 
 
-## Simplifying the data
-
-```{r}
-data_small <- select(data, diabetes, SDC_AGE_CALC, SDC_EDU_LEVEL, PM_BMI_SR, WRK_FULL_TIME, SMK_CIG_EVER, SDC_INCOME, PA_TOTAL_SHORT, HS_ROUTINE_VISIT_EVER, PSE_ADULT_WRK_DURATION, DIS_RESP_SLEEP_APNEA_EVER, SDC_EDU_LEVEL_AGE, SDC_GENDER)
-```
-
-
-
 # **Random Forest Model**
 
 ## Splitting the dataset
@@ -131,7 +135,7 @@ set.seed(10)
 
 data_split <- initial_split(data, 
                             strata = diabetes, 
-                            prop = 0.70)
+                            prop = 0.80)
 ```
 
 The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" esnures equal split of the predictor in test and training dataset 
@@ -145,6 +149,7 @@ train_data <- training(data_split)
 test_data  <- testing(data_split)
 
 ```
+
 
 
 ## Detecting core 
@@ -168,7 +173,7 @@ mtry = NULL
 
 ```{r}
 rf_model_default <- rand_forest() %>% 
-  set_engine("ranger") %>% 
+  set_engine("ranger", num.threads = cores) %>% 
   set_mode("classification")
 ```
 
@@ -177,9 +182,26 @@ rf_model_default <- rand_forest() %>%
 
 ```{r}
 rf_recipe_default <- recipe(diabetes ~ ., data = train_data) %>% 
+  #step_dummy(all_nominal_predictors()) %>% 
   step_smotenc(diabetes, over_ratio = 0.90) %>%  # Upsampling the predictor variable to overcome the imbalance in the dataset. Here I used 15% of NO responses.It can be 90% or any reasonable percentage.  
   step_zv(all_predictors())
 ```
+
+#### Visualizing train_data after SMOTE
+
+```{r}
+train_data_smote <- rf_recipe_default %>%
+  prep() %>%
+  bake(new_data = NULL)
+
+
+train_data_smote %>%
+  count(diabetes) %>%
+  ggplot(aes(x = diabetes, y = n, fill = diabetes)) +
+  geom_col() +
+  ggtitle("Class Distribution After SMOTE")
+```
+
 
 
 ### Building workflow 
@@ -221,9 +243,11 @@ rf_default_roc <- predict(rf_workflow_default_fit, new_data = test_data, type = 
 
 rf_default_roc %>% 
   select(.pred_No,.pred_Yes,diabetes) %>% 
-  head()
+  glimpse()
 ```
+
 The probability predictions gives in probability(out of 1), how likely a prediction is to be NO or Yes. This predictions will be used for the ROC_CURVE later in the code
+
 
 
 
@@ -242,66 +266,74 @@ rf_predict_default %>%
   
 ```
 
-
 ### Model Evaluation
 
 #### Calculating metrics 
 
 ```{r}
-default_accuracy <- accuracy(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_sensitivity <- sens(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_specificity <- spec(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_precision <- precision(rf_predict_default, truth = diabetes, estimate = .pred_class)
-default_f_score <- f_meas(rf_predict_default, truth = diabetes, estimate = .pred_class)
+c_matrix <- conf_mat(rf_predict_default, truth = diabetes, estimate = .pred_class)
+
+c_matrix
 ```
 
-#### Combine metrics into a data frame
 
 ```{r}
-default_metrics <- data.frame(
-  accuracy_default = default_accuracy$.estimate,
-  sensitivity_default = default_sensitivity$.estimate,
-  specificity_default = default_specificity$.estimate,
-  precision_default = default_precision$.estimate,
-  f_score_default = default_f_score$.estimate
-)
+metrics <- metric_set(accuracy, sens, spec, precision)
 
-default_metrics %>% 
-  head()
+metrics(rf_predict_default, truth = diabetes, estimate = .pred_class)
+
 ```
 
-#### Changing shape of dataframe 
-
-```{r}
-default_metrics_long <- default_metrics %>% 
-  pivot_longer(cols = accuracy_default:f_score_default,
-               names_to = "metrics",
-               values_to = "estimates")
-
-default_metrics_long
-```
 
 ### Roc_Curve for default 
 
 ```{r}
-
-rf_default_roc$diabetes <- ifelse(rf_default_roc$diabetes == "Yes", 1, 0)
-
-roc_curve <- roc(rf_default_roc$diabetes, rf_default_roc$.pred_Yes)
-
-auc_value <- auc(roc_curve)
-
-```
-
-```{r}
 roc_curves_default  <- rf_default_roc %>%
-  roc_curve(truth = diabetes, .pred_No) %>% 
+  mutate(diabetes = as.factor(diabetes)) %>% 
+  roc_curve(truth = diabetes, .pred_Yes) %>% 
   autoplot()
 
 roc_curves_default
 ```
 
 This plot shows the trade-off between sensitivity (true positive rate) and 1 - specificity (false positive rate). The model has an AUC of about 0.80 which is very close to 1 indicating better predictive performance of the model to differentiate between true positives and false positives.
+
+
+# **Correcting low sensitivity**
+
+From the model above, I could see, sensitivity is 10% whereas specificity is close to 100%. 
+
+
+##  Reeducing threshold
+
+```{r}
+rf_default_prob <- rf_default_roc %>% 
+  select(.pred_No,.pred_Yes,diabetes) %>% 
+  mutate(pred_class = ifelse(.pred_Yes > 0.23, "Yes", "No")) %>% 
+  mutate(pred_class = as.factor(pred_class)) %>% 
+  mutate(pred_class = factor(pred_class,
+                             level = c("Yes", "No")))
+
+rf_default_prob %>% 
+  head()
+```
+## Evaluating model
+
+```{r}
+con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
+
+con_matrix
+```
+
+```{r}
+metrics <- metric_set(accuracy,sens,spec, precision)
+
+metrics_default <- metrics(rf_default_prob, truth = diabetes,estimate =  pred_class)
+
+metrics_default
+```
+
+The model is performing better(kinda). 
 
 
 ## **Random forest model (Hyperparameters tunning)**
@@ -322,7 +354,7 @@ Here the hyperparameters are tuned to see the best value for each parameter that
 ```{r}
 rf_recipe <- 
   recipe(diabetes ~ ., data = train_data) %>% 
-  step_smotenc(diabetes,over_ratio = 0.15) %>% 
+  step_smotenc(diabetes,over_ratio = 0.50) %>% 
   step_zv(all_predictors()) 
 ```
 
@@ -486,81 +518,19 @@ conf_mat(final_model_predict, truth = diabetes,
 ```
 
 
-#### Accuracy
-
+#### Accuracy, Sens, Specs and Precision
 
 ```{r}
-accuracy_tuned <- accuracy(final_model_predict, truth = diabetes,
+metrics <- metric_set(accuracy, sens, spec, precision)
+metrics_tuned <- metrics(final_model_predict, truth = diabetes,
          estimate = .pred_class)
-
-accuracy_tuned
 ```
 The RF tuned model has a very high accuracy of 92 % 
 
-#### Sensitivity
-
 ```{r}
-sensitivity_tuned <- sens(final_model_predict, truth = diabetes,
-         estimate = .pred_class)
-
-sensitivity_tuned
+metrics_tuned
 ```
 
-#### Specificity
-
-```{r}
-specificity_tuned <- spec(final_model_predict, truth = diabetes,
-         estimate = .pred_class)
-
-specificity_tuned
-```
-
-#### F1 Score
-
-```{r}
-f1_score_tuned <- f_meas(final_model_predict, truth = diabetes,
-         estimate = .pred_class)
-
-f1_score_tuned
-```
-
-#### Precision
-
-```{r}
-precision_tuned  <- precision(final_model_predict, truth = diabetes,
-         estimate = .pred_class) 
-
-precision_tuned
-```
-
-
-#### Combine metrics into a data frame
-
-```{r}
-tuned_metrics <- data.frame(
-  accuracy_tuned = accuracy_tuned$.estimate,
-  sensitivity_tuned = sensitivity_tuned$.estimate,
-  specificity_tuned = specificity_tuned$.estimate,
-  precision_tuned= precision_tuned$.estimate,
-  f_score_tuned = f1_score_tuned$.estimate
-)
-
-tuned_metrics %>% 
-  head()
-```
-
-
-
-#### Changing shape of dataframe 
-
-```{r}
-tuned_metrics_long <- tuned_metrics %>% 
-  pivot_longer(cols = accuracy_tuned:f_score_tuned,
-               names_to = "metrics",
-               values_to = "estimates")
-
-tuned_metrics_long
-```
 
 
 ### Variable Importance
@@ -580,75 +550,122 @@ final_rf_model %>%
 
 ```{r}
 roc_curves_tuned  <- rf_tuned_roc %>%
-  yardstick::roc_curve(truth = diabetes, .pred_No) %>% 
+  yardstick::roc_curve(truth = diabetes, .pred_Yes) %>% 
   autoplot()
 
 roc_curves_tuned
 ```
 
+# **Correcting low sensitivity**
+
+From the model above, I could see, sensitivity is 10% whereas specificity is close to 100%. 
+
+
+##  Reeducing threshold
+
+```{r}
+rf_default_prob <- rf_tuned_roc %>% 
+  select(.pred_No,.pred_Yes,diabetes) %>% 
+  mutate(pred_class = ifelse(.pred_Yes > 0.23, "Yes", "No")) %>% 
+  mutate(pred_class = as.factor(pred_class)) %>% 
+  mutate(pred_class = factor(pred_class,
+                             level = c("Yes", "No")))
+
+rf_default_prob %>% 
+  head()
+```
+## Evaluating model
+
+```{r}
+con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
+
+con_matrix
+```
+
+```{r}
+metric <- metric_set(accuracy,sens,spec, precision)
+
+metrics_tuned <- metric(rf_default_prob, truth = diabetes,estimate =  pred_class)
+
+metrics_tuned
+```
 
 ## Default and Tuned Model Comparison 
 
-```{r}
-tuned_metrics_long
+### Reading metrics 
 
-default_metrics_long
+```{r}
+metrics_default
+metrics_tuned
 ```
+### Labeling metrics 
 
 ```{r}
-metrics_combined <- bind_rows(tuned_metrics_long, default_metrics_long)
+metrics_default <- metrics_default %>% 
+  mutate(name = "Rf_Default")
 
-metrics_combined %>% 
+metrics_default %>%  
+  glimpse()
+  
+```
+```{r}
+metrics_tuned <- metrics_tuned %>% 
+  mutate(name = "Rf_Tuned")
+
+metrics_tuned %>%  
+  glimpse()
+```
+### Binding metrics 
+
+```{r}
+metrics_eval <- bind_rows(metrics_default, metrics_tuned)
+
+metrics_eval %>% 
   glimpse()
 ```
 
-### Accuracy Comparison
-
-```{r}
-accuracy_compare <- metrics_combined %>% 
-  filter(metrics %in% c("accuracy_tuned", "accuracy_default"))
-```
-
-#### Visualizing accuracy comparison 
+## Visualizing accuracy comparison 
 ```{r, fig.width=10, fig.height= 3}
-ggplot(data = accuracy_compare, aes(x = metrics, y = estimates))+
-  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
+ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name))+
+  geom_segment(aes(x = .metric, xend = .metric, yend = .estimate, y = 0))+
   geom_point(size = 4, colour = "#a13")+
-  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
+  geom_text(aes(label = round(.estimate, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
   coord_flip()
 ```
-### sensitivity Comparison
+## Visualizing accuracy comparison 
+```{r, fig.width=10, fig.height= 3}
+ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name ))+
+  geom_col(position = "dodge")
+```
+
+## **Comparing RoC Curve**
 
 ```{r}
-sensitivity_compare <- metrics_combined %>% 
-  filter(metrics %in% c("sensitivity_tuned", "sensitivity_default"))
+rf_default_roc <- rf_default_roc %>% 
+  mutate(name = "Rf_Default")
+
+rf_default_prob <- rf_default_prob %>% 
+  mutate(name = "Rf_Tuned")
+
+eval_roc <- bind_rows(rf_default_prob, rf_default_roc)
+
+
+eval_roc <- eval_roc %>%  
+  select(name,.pred_No,.pred_Yes,diabetes)
+
+
+eval_roc %>% 
+  glimpse()
 ```
-
-#### Visualizing sensitivity comparison
-
-```{r, fig.width=10, fig.height= 3}
-ggplot(data = sensitivity_compare, aes(x = metrics, y = estimates))+
-  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
-  geom_point(size = 4, colour = "#a13")+
-  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
-  coord_flip()
-```
-
-
-### Precision Comparison
 
 ```{r}
-precision_compare <- metrics_combined %>% 
-  filter(metrics %in% c("precision_tuned", "precision_default"))
-```
+curve <- eval_roc %>%
+  group_by(name) %>% 
+  roc_curve(truth = diabetes, .pred_Yes) %>% 
+  autoplot() +
+  aes(color = name)
 
-#### Visualizing precision comparison
+curve
 
-```{r, fig.width=10, fig.height= 3}
-ggplot(data = precision_compare, aes(x = metrics, y = estimates))+
-  geom_segment(aes(x = metrics, xend = metrics, yend = estimates, y = 0))+
-  geom_point(size = 4, colour = "#a13")+
-  geom_text(aes(label = round(estimates, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
-  coord_flip()
 ```
 
