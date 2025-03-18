@@ -36,6 +36,4 @@ There are 4 files attached to this repository. TWO rmarkdown files and their res
 1.  The [Bernard_Asante_CHEP_898_Random_Forest_DM.Rmd](https://github.com/Bernard-AI4PH/Random_Forest_Analysis/blob/main/Bernard_Asante_CHEP_898_Random_Forest_DM.Rmd) file is the [RMarkdown](https://rmarkdown.rstudio.com/) that implements a Random Forest model to predict diabetes. It includes data preprocessing, exploratory data analysis, handling class imbalance with SMOTE, model training with hyperparameter tuning, performance evaluation using accuracy, sensitivity, and precision, and model comparison through ROC curves and feature importance analysis.
 
 
-2. The [Bernard_Asante_CHEP_898_Random_Forest_gen_health.Rmd](https://github.com/Bernard-AI4PH/Random_Forest_Analysis/blob/main/Bernard_Asante_CHEP_898_Random_Forest_gen_health.Rmd) also applied RF model on the can path student dataset using gen health as a predictor.
-The HS_GEN_STATUS was recoded into poor, good and excellent. Data processing, data visualization, feature engineering and steps for building the machine learning model has been outlined in the code script.
-
+2. The [Bernard_Asante_CHEP_898_Random_Forest_DM.html](https://github.com/Bernard-AI4PH/Random_Forest_Analysis/blob/main/Bernard_Asante_CHEP_898_Random_Forest_DM.html) file is the html output of the R markdown file. This file can be downloaded and view in the web browser. 

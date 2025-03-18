@@ -740,4 +740,4 @@ curve <- eval_roc %>%
 curve
 
 ```
-From the ROC_CURVE, the area under the curve for the default is bigger compared to the tuned models. This means the default model had better overall prediction ability compared to the tuned model. 
+From the ROC_CURVE, the area under the curve for the default is bigger compared to the tuned model. This means the default model had better overall prediction ability compared to the tuned model. 
