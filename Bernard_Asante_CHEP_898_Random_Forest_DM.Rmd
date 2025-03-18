@@ -38,9 +38,12 @@ library(pROC)
 # **Reading in data**
 
 ```{r}
-data <- read_csv("mice_all_imp.csv")  
+data <- read_csv("mice_all_imp.csv")
+```
 
+## Converting variables to factor
 
+```{r}
 data <- data %>% mutate_at(3, factor)
 data <- data %>% mutate_at(5:6, factor)
 data <- data %>% mutate_at(8:12, factor)
@@ -64,7 +67,7 @@ From the data dictionary, DIS_DIAB_EVER DICTIONARY has 3 responses:
 ```{r}
 table(data$DIS_DIAB_EVER)
 ```
- From the can path dataset dictionary, 0 and 2 are almost the same. I want to recode them into binary where 0 and 2 will be recoded as "NO" and 1 recoded as "Yes"
+ From the can path dataset dictionary, 0 and 2 can be assumed to mean response for not having diabetes. I want to recode them into binary(dichotomous variable) where 0 and 2 will be recoded as "No" and 1 recoded as "Yes"
  
 
 ## Recoding Predictor variable 
@@ -76,17 +79,25 @@ data <- data %>%
 		DIS_DIAB_EVER == 1 ~ "Yes",
 		DIS_DIAB_EVER == 2 ~ "No")) %>%
 		mutate(diabetes = as.factor(diabetes))
+```
 
-data$DIS_DIAB_EVER <- NULL # Here I have to drop the main variable from the dataset
+
+```{r}
+data$DIS_DIAB_EVER <- NULL # I have to drop the main variable from the dataset
 
 ```
 
+Both variables (DIS_DIAB_EVER and diabetes) convey essentially the same information.  Including both can result in redundancy and multicollinearity.  This redundancy can negatively impact model performance, interpretability, and variable significance measures.
+
+
 ## Checking levels
+
+Here, i want to observe how the values of the predictor variable is arranged. From the dataset, which of  the responses("yes" and "No") is set as a preference. That is when used in a table or graph(barplot), which response will  come first. 
 
 ```{r}
 levels(data$diabetes)
 ```
-I will have to factor the level to make "Yes" at level one and "NO" at second level
+I will have to factor the level to make "Yes" at level one or reference in logistic models and "No" at second level
 
 
 ## Summary statistics of diabetes variable 
@@ -100,7 +111,7 @@ data$diabetes %>%
   summary()
 ```
 I can see imbalance in the predictor variable. Let us do further analysis to understand it properly.
-Here I will calculate the proportions of YEs and NO responses. 
+Here I will calculate the proportions of "Yes" and "No" responses. 
 
 ## Calculating proportion of diabetes response
 
@@ -110,9 +121,7 @@ prop_diabetes <- prop.table(table(data$diabetes)) * 100
 prop_diabetes
 ```
 
-I can see a high proportion of "No" responses(92.4%) compared to Yes with 7.56%. This imbalance is because I recoded 0 and 2 responses as "NO". I need to upsample the Yes responses to get a better model. 
-
-Synthetic Minority Over-sampling Technique(SMOTE) will be implemented to increase the Yes responses. 
+I can see a high proportion of "No" responses(92.4%) compared to Yes with 7.56%. This imbalance is because I recoded 0 and 2 responses as "NO". I need to upsample the Yes responses to get a better model. Synthetic Minority Over-sampling Technique(SMOTE) will be implemented to increase the Yes responses. 
 
 ## Visualizing Diabetes response
 
@@ -120,7 +129,9 @@ Synthetic Minority Over-sampling Technique(SMOTE) will be implemented to increas
 data %>% 
   count(diabetes) %>% 
   ggplot(aes(x = diabetes, y = n, fill = diabetes))+
-  geom_col()  
+  geom_col()+
+  labs(title = "Barplot of predictor variables", 
+       y = "frequency")
 ```
 This plot above shows the level of imbalance in the predictor variable
 
@@ -138,7 +149,7 @@ data_split <- initial_split(data,
                             prop = 0.80)
 ```
 
-The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" esnures equal split of the predictor in test and training dataset 
+The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" ensures equal split of the predictor in test and training dataset 
 
 ## Training and Testing Data 
 
@@ -159,7 +170,7 @@ cores <- parallel::detectCores()
 cores
 ```
 
-Detecting the core of the machine because I will be doing parrallel compution on 7 cores to facilitate the process. 
+Detecting the core of the machine because I will be doing parallel computation on 7 cores to facilitate the process. 
 
 
 ## **Random forest model (Default hyperparameters)**
@@ -246,9 +257,7 @@ rf_default_roc %>%
   glimpse()
 ```
 
-The probability predictions gives in probability(out of 1), how likely a prediction is to be NO or Yes. This predictions will be used for the ROC_CURVE later in the code
-
-
+The probability predictions gives in probability(out of 1), how likely a prediction is to be No or Yes. This predictions will be used for the ROC_CURVE later in the code
 
 
 ### combining test data and predictions
@@ -275,33 +284,23 @@ c_matrix <- conf_mat(rf_predict_default, truth = diabetes, estimate = .pred_clas
 
 c_matrix
 ```
-
+The model predicts "No" well (high true negatives: 7470), but frequently misclassifies actual "Yes" cases, leading to many false negatives (557).
 
 ```{r}
 metrics <- metric_set(accuracy, sens, spec, precision)
 
-metrics(rf_predict_default, truth = diabetes, estimate = .pred_class)
+met_default <- metrics(rf_predict_default, truth = diabetes, estimate = .pred_class)
+
+met_default
 
 ```
 
-
-### Roc_Curve for default 
-
-```{r}
-roc_curves_default  <- rf_default_roc %>%
-  mutate(diabetes = as.factor(diabetes)) %>% 
-  roc_curve(truth = diabetes, .pred_Yes) %>% 
-  autoplot()
-
-roc_curves_default
-```
-
-This plot shows the trade-off between sensitivity (true positive rate) and 1 - specificity (false positive rate). The model has an AUC of about 0.80 which is very close to 1 indicating better predictive performance of the model to differentiate between true positives and false positives.
+The model is highly accurate overall, with excellent specificity, but suffers from low sensitivity and poor precision predicting diabetes. The next approach is to reduce the threshold to predict positive to 
 
 
 # **Correcting low sensitivity**
 
-From the model above, I could see, sensitivity is 10% whereas specificity is close to 100%. 
+From the model above, we can see, sensitivity is 10% whereas specificity is close to 100%. 
 
 
 ##  Reeducing threshold
@@ -317,6 +316,9 @@ rf_default_prob <- rf_default_roc %>%
 rf_default_prob %>% 
   head()
 ```
+This output shows predicted probabilities (.pred_No, .pred_Yes) and predicted class (pred_class). The model sometimes incorrectly predicts "Yes" despite moderate probabilities favoring "No".
+
+
 ## Evaluating model
 
 ```{r}
@@ -333,7 +335,22 @@ metrics_default <- metrics(rf_default_prob, truth = diabetes,estimate =  pred_cl
 metrics_default
 ```
 
-The model is performing better(kinda). 
+The model has decent overall accuracy (75%), moderate sensitivity (60%) for detecting diabetes, good specificity (ability to detect non-diabetes), but very low precision. The model is performing better(kinda). 
+
+
+### Roc_Curve for default 
+
+```{r}
+roc_curves_default  <- rf_default_roc %>%
+  mutate(diabetes = as.factor(diabetes)) %>% 
+  roc_curve(truth = diabetes, .pred_Yes) %>% 
+  autoplot()
+
+roc_curves_default
+```
+
+This plot shows the trade-off between sensitivity (true positive rate) and 1 - specificity (false positive rate). The model has an AUC of about 0.80 which is very close to 1 indicating better predictive performance of the model to differentiate between true positives and false positives.
+
 
 
 ## **Random forest model (Hyperparameters tunning)**
@@ -397,6 +414,7 @@ rf_tune
 ```
 
 ### Evaluating  Tunning metrics 
+
 ```{r}
 tune_metrics <- rf_tune %>% 
   collect_metrics()
@@ -458,7 +476,7 @@ rf_best <-
 rf_best  # we know the best model has 1 mtry and 50 min_n
 ```
 
-The best model is preprocessor1_model51 becuase it has the best hyperparamters values as seen on the plot. mtry 13,trees = 100 adn  min_n of 50 
+The best model is preprocessor1_model41 because it has the best hyperparameters values as seen on the plot. mtry 13,trees = 100 and  min_n of 35.
 
 ### Finalizing the best model 
 
@@ -495,10 +513,11 @@ final_model_predict<- final_model_predict  %>%
   select(.pred_class, diabetes)
 
 final_model_predict %>% 
-  head()
+  glimpse()
 ```
 
 #### Probabiltiy prediciton 
+
 
 ```{r}
 rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "prob") %>% 
@@ -516,22 +535,22 @@ rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "pr
 conf_mat(final_model_predict, truth = diabetes,
          estimate = .pred_class)
 ```
-
+We can see the model is predicting less true positives resulting in more false positives where as there is higher predicition of true negatives and less false positive.
 
 #### Accuracy, Sens, Specs and Precision
 
 ```{r}
 metrics <- metric_set(accuracy, sens, spec, precision)
-metrics_tuned <- metrics(final_model_predict, truth = diabetes,
+metrics_tune <- metrics(final_model_predict, truth = diabetes,
          estimate = .pred_class)
 ```
 The RF tuned model has a very high accuracy of 92 % 
 
 ```{r}
-metrics_tuned
+metrics_tune
 ```
 
-
+The model has very high accuracy and specificity, but extremely low sensitivity and poor precision, indicating it fails to detect positives.
 
 ### Variable Importance
 
@@ -544,7 +563,7 @@ final_rf_model %>%
     data = juice(tree_prep)) %>%
   vip(geom = "point")
 ```
-
+The plot you above depicts Permutation Feature Importance, which indicates variables that had the largest influence on predicting diabetes in the random forest model.Higher significance scores indicate that the predictor has a considerable influence on the model's accuracy. The variables at the top of the graph (DIS_HBP_EVER, HS_GEN_HEALTH, and DIS_ENDO_HB_CHOL_EVER) are the most important for predicting diabetes.
 
 ### Roc Curve for tuned 
 
@@ -556,17 +575,25 @@ roc_curves_tuned  <- rf_tuned_roc %>%
 roc_curves_tuned
 ```
 
+The ROC curve reveals that the model classifies considerably between diabetes and no diabetes, outperforming the diagonal line(random guess) but remaining limited. The curve's location suggests fair but poor prediction performance, implying that the model requires improvement to efficiently detect real diabetes patients with minimal errors.
+
+
 # **Correcting low sensitivity**
 
-From the model above, I could see, sensitivity is 10% whereas specificity is close to 100%. 
+```{r}
+metrics_tune
+```
 
 
-##  Reeducing threshold
+From the metrics tune above, we could see, sensitivity is extremely low whereas specificity is close to 100%. This means, "Yes" prediction has a lower threshold compared to the default 0.5. The next step is to reduce the threshold
+
+
+##  Reducing threshold
 
 ```{r}
 rf_default_prob <- rf_tuned_roc %>% 
   select(.pred_No,.pred_Yes,diabetes) %>% 
-  mutate(pred_class = ifelse(.pred_Yes > 0.23, "Yes", "No")) %>% 
+  mutate(pred_class = ifelse(.pred_Yes > 0.30, "Yes", "No")) %>% 
   mutate(pred_class = as.factor(pred_class)) %>% 
   mutate(pred_class = factor(pred_class,
                              level = c("Yes", "No")))
@@ -574,6 +601,9 @@ rf_default_prob <- rf_tuned_roc %>%
 rf_default_prob %>% 
   head()
 ```
+
+The code above is to reduce the threshold for predicting Yes from 0.5 to 0.30 to see how it affects sensitivity and specificity
+
 ## Evaluating model
 
 ```{r}
@@ -581,6 +611,7 @@ con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
 
 con_matrix
 ```
+The model struggles to detect true positives (low sensitivity) but it is better than when we used threshold at 0.5
 
 ```{r}
 metric <- metric_set(accuracy,sens,spec, precision)
@@ -590,9 +621,52 @@ metrics_tuned <- metric(rf_default_prob, truth = diabetes,estimate =  pred_class
 metrics_tuned
 ```
 
-## Default and Tuned Model Comparison 
+# **Model Comparison**
 
-### Reading metrics 
+## Using default threshold(0.5)
+
+### Labeling metrics 
+
+```{r}
+metric_default <- met_default %>% 
+  mutate(name = "Rf_Default")
+
+metric_default %>%  
+  glimpse()
+  
+```
+```{r}
+metric_tuned <- metrics_tune %>% 
+  mutate(name = "Rf_Tuned")
+
+metric_tuned %>%  
+  glimpse()
+```
+
+### Binding metrics 
+
+```{r}
+metric_eval <- bind_rows(metric_default, metric_tuned)
+
+metric_eval %>% 
+  glimpse()
+```
+
+## Visualizing metrics comparison 
+
+```{r, fig.width=10, fig.height= 3}
+ggplot(data = metric_eval, aes(x = .metric, y = .estimate, fill = name ))+
+  geom_col(position = "dodge")+
+  labs(title = "Barplot comparing tuned and default hyperparamter models",
+       subtitle = "Threshold ~ 0.5")
+```
+Accuracy and specificity relatively improved after tuning comapred to default hyperameters however, tuning does not improve sensitivity and precision of the model. 
+
+
+
+## Adjusted threshold
+
+### Labeling metrics 
 
 ```{r}
 metrics_default
@@ -624,19 +698,17 @@ metrics_eval %>%
   glimpse()
 ```
 
-## Visualizing accuracy comparison 
-```{r, fig.width=10, fig.height= 3}
-ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name))+
-  geom_segment(aes(x = .metric, xend = .metric, yend = .estimate, y = 0))+
-  geom_point(size = 4, colour = "#a13")+
-  geom_text(aes(label = round(.estimate, 2)), hjust = -0.2, vjust = 0.5, color = "black")+
-  coord_flip()
-```
-## Visualizing accuracy comparison 
+## Visualizing metrics comparison 
+
 ```{r, fig.width=10, fig.height= 3}
 ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name ))+
-  geom_col(position = "dodge")
+  geom_col(position = "dodge")+
+  geom_col(position = "dodge")+
+  labs(title = "Barplot comparing tuned and default hyperparamter models",
+       subtitle = "Threshold ~ adjusted")
 ```
+
+After reducing the threshold for prediciting Yes, the overal accuracy reduced but sensitivity and specificity achieved considerable increase compared to when default threshold of 0.5 was used.
 
 ## **Comparing RoC Curve**
 
@@ -668,4 +740,4 @@ curve <- eval_roc %>%
 curve
 
 ```
-
+From the ROC_CURVE, the area under the curve for the default is bigger compared to the tuned models. This means the default model had better overall prediction ability compared to the tuned model. 
