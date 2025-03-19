@@ -110,6 +110,7 @@ data <- data %>%
 data$diabetes %>% 
   summary()
 ```
+
 I can see imbalance in the predictor variable. Let us do further analysis to understand it properly.
 Here I will calculate the proportions of "Yes" and "No" responses. 
 
@@ -133,6 +134,7 @@ data %>%
   labs(title = "Barplot of predictor variables", 
        y = "frequency")
 ```
+
 This plot above shows the level of imbalance in the predictor variable
 
 
@@ -148,6 +150,7 @@ data_split <- initial_split(data,
                             strata = diabetes, 
                             prop = 0.80)
 ```
+
 
 The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" ensures equal split of the predictor in test and training dataset 
 
@@ -243,6 +246,8 @@ rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, typ
 rf_predict_default %>% 
   head()
 ```
+
+
 This is to predict the class of the test_data using the trained model. This is good to assess metrics such as accuracy, precision etc. 
 
 
@@ -284,6 +289,7 @@ c_matrix <- conf_mat(rf_predict_default, truth = diabetes, estimate = .pred_clas
 
 c_matrix
 ```
+
 The model predicts "No" well (high true negatives: 7470), but frequently misclassifies actual "Yes" cases, leading to many false negatives (557).
 
 ```{r}
@@ -316,6 +322,7 @@ rf_default_prob <- rf_default_roc %>%
 rf_default_prob %>% 
   head()
 ```
+
 This output shows predicted probabilities (.pred_No, .pred_Yes) and predicted class (pred_class). The model sometimes incorrectly predicts "Yes" despite moderate probabilities favoring "No".
 
 
@@ -362,6 +369,7 @@ rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>%
               set_engine("ranger", num.threads = cores) %>% 
               set_mode("classification")
 ```
+
 
 Here the hyperparameters are tuned to see the best value for each parameter that can give us the best predictions 
 
@@ -436,6 +444,7 @@ tune_metrics <- tune_metrics %>%
 tune_metrics %>% 
   head()
 ```
+
 We are only interested in mean,min_n, trees and mtry
 
 #### Selecting relevant variables  
@@ -476,7 +485,7 @@ rf_best <-
 rf_best  # we know the best model has 1 mtry and 50 min_n
 ```
 
-The best model is preprocessor1_model41 because it has the best hyperparameters values as seen on the plot. mtry 13,trees = 100 and  min_n of 35.
+The best model is preprocessor1_model41 because it has the best hyperparameters values as seen on the plot. mtry 1,trees = 67  and  min_n of 35.
 
 ### Finalizing the best model 
 
@@ -535,6 +544,7 @@ rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "pr
 conf_mat(final_model_predict, truth = diabetes,
          estimate = .pred_class)
 ```
+
 We can see the model is predicting less true positives resulting in more false positives where as there is higher predicition of true negatives and less false positive.
 
 #### Accuracy, Sens, Specs and Precision
@@ -544,6 +554,7 @@ metrics <- metric_set(accuracy, sens, spec, precision)
 metrics_tune <- metrics(final_model_predict, truth = diabetes,
          estimate = .pred_class)
 ```
+
 The RF tuned model has a very high accuracy of 92 % 
 
 ```{r}
@@ -563,6 +574,7 @@ final_rf_model %>%
     data = juice(tree_prep)) %>%
   vip(geom = "point")
 ```
+
 The plot you above depicts Permutation Feature Importance, which indicates variables that had the largest influence on predicting diabetes in the random forest model.Higher significance scores indicate that the predictor has a considerable influence on the model's accuracy. The variables at the top of the graph (DIS_HBP_EVER, HS_GEN_HEALTH, and DIS_ENDO_HB_CHOL_EVER) are the most important for predicting diabetes.
 
 ### Roc Curve for tuned 
@@ -611,6 +623,7 @@ con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
 
 con_matrix
 ```
+
 The model struggles to detect true positives (low sensitivity) but it is better than when we used threshold at 0.5
 
 ```{r}
@@ -660,6 +673,7 @@ ggplot(data = metric_eval, aes(x = .metric, y = .estimate, fill = name ))+
   labs(title = "Barplot comparing tuned and default hyperparamter models",
        subtitle = "Threshold ~ 0.5")
 ```
+
 Accuracy and specificity relatively improved after tuning comapred to default hyperameters however, tuning does not improve sensitivity and precision of the model. 
 
 
@@ -740,4 +754,5 @@ curve <- eval_roc %>%
 curve
 
 ```
+
 From the ROC_CURVE, the area under the curve for the default is bigger compared to the tuned model. This means the default model had better overall prediction ability compared to the tuned model. 
