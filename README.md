@@ -31,7 +31,7 @@ To improve the model, hyperparameter tuning is performed using grid search and c
 
 # Files attached to repository
 
-There are 4 files attached to this repository. TWO rmarkdown files and their respective html outputs.
+There are 2 files attached to this repository. TWO rmarkdown files and their respective html outputs.
 
 1.  The [Bernard_Asante_CHEP_898_Random_Forest_DM.Rmd](https://github.com/Bernard-AI4PH/Random_Forest_Analysis/blob/main/Bernard_Asante_CHEP_898_Random_Forest_DM.Rmd) file is the [RMarkdown](https://rmarkdown.rstudio.com/) that implements a Random Forest model to predict diabetes. It includes data preprocessing, exploratory data analysis, handling class imbalance with SMOTE, model training with hyperparameter tuning, performance evaluation using accuracy, sensitivity, and precision, and model comparison through ROC curves and feature importance analysis.
 
