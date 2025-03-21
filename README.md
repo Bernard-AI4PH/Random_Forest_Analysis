@@ -15,7 +15,7 @@ The following objectives were achieved in the assignment, to:
 
 # Dataset
 
-The [Can Path Student Dataset](https://canpath.ca/student-dataset/) was used  to perform a matching analysis. The dataset has already been cleaned using [Multivariate Imputation by Chained Equations](https://www.rdocumentation.org/packages/mice/versions/3.17.0/topics/mice) method to handle missing data. 
+The [Can Path Student Dataset](https://canpath.ca/student-dataset/) was used  to perform a Random Forest Analysis. The dataset has already been cleaned using [Multivariate Imputation by Chained Equations](https://www.rdocumentation.org/packages/mice/versions/3.17.0/topics/mice) method to handle missing data. 
 
 The data has 41187 observation and 93 columns after cleaning. 
 
