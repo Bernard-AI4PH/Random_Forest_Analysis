@@ -55,7 +55,7 @@ data$ADM_STUDY_ID <- NULL
 ```
 
 
-# **Exploratory Data Analysis on predictor**
+# **Exploratory Data Analysis on Outcome Variable**
 
 Preparing diabetes variable. This will be used as an outcome variable.
 
@@ -92,7 +92,7 @@ Both variables (DIS_DIAB_EVER and diabetes) convey essentially the same informat
 
 ## Checking levels
 
-Here, i want to observe how the values of the predictor variable is arranged. From the dataset, which of  the responses("yes" and "No") is set as a preference. That is when used in a table or graph(barplot), which response will  come first. 
+Here, i want to observe how the values of the outcome variable is arranged. From the dataset, which of  the responses("yes" and "No") is set as a preference. That is when used in a table or graph(barplot), which response will  come first. 
 
 ```{r}
 levels(data$diabetes)
@@ -111,7 +111,7 @@ data$diabetes %>%
   summary()
 ```
 
-I can see imbalance in the predictor variable. Let us do further analysis to understand it properly.
+I can see imbalance in the outcome variable. Let us do further analysis to understand it properly.
 Here I will calculate the proportions of "Yes" and "No" responses. 
 
 ## Calculating proportion of diabetes response
@@ -135,7 +135,7 @@ data %>%
        y = "frequency")
 ```
 
-This plot above shows the level of imbalance in the predictor variable
+This plot above shows the level of imbalance in the outcome variable
 
 
 # **Random Forest Model**
@@ -152,7 +152,7 @@ data_split <- initial_split(data,
 ```
 
 
-The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" ensures equal split of the predictor in test and training dataset 
+The main dataset has to be split into 70% for train data and 30% for test data. Strata = "diabetes" ensures equal split of the outcome in test and training dataset 
 
 ## Training and Testing Data 
 
