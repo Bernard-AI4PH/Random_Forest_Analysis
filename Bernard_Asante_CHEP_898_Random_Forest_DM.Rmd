@@ -106,18 +106,21 @@ I will have to factor the level to make "Yes" at level one or reference in logis
 
 data <- data %>% 
   mutate(diabetes = factor(diabetes,
-                           levels = c("Yes", "No")))
+                           levels = c("Yes", "No"))) # This code reorders the factor levels of the diabetes variable, setting "Yes" as the reference level (i.e., the first level). 
 data$diabetes %>% 
   summary()
 ```
 
-I can see imbalance in the outcome variable. Let us do further analysis to understand it properly.
+From this code, we can see that "Yes" comes before "No" and that will be the arrangement in analysis and visualizations.
+For example when we plot a simple bar graph, the bar of "yes" will come before "No". 
+
+Also, I can see imbalance in the outcome variable. Let us do further analysis to understand it properly.
 Here I will calculate the proportions of "Yes" and "No" responses. 
 
 ## Calculating proportion of diabetes response
 
 ```{r}
-prop_diabetes <- prop.table(table(data$diabetes)) * 100
+prop_diabetes <- prop.table(table(data$diabetes)) * 100 # This line calculates the proportion (as percentages) of each level in the diabetes variable. It first creates a frequency table using table(), then converts it to proportions using prop.table(), and finally multiplies by 100 to express the values as percentages.
 
 prop_diabetes
 ```
@@ -132,7 +135,7 @@ data %>%
   ggplot(aes(x = diabetes, y = n, fill = diabetes))+
   geom_col()+
   labs(title = "Barplot of predictor variables", 
-       y = "frequency")
+       y = "frequency") #This code creates a bar plot to visualize the frequency of each category in the diabetes variable. It counts the number of observations for each diabetes category ("Yes" and "No"), and uses ggplot2 to display the results as colored bars
 ```
 
 This plot above shows the level of imbalance in the outcome variable
@@ -148,7 +151,7 @@ set.seed(10)
 
 data_split <- initial_split(data, 
                             strata = diabetes, 
-                            prop = 0.80)
+                            prop = 0.80)#This code splits the dataset into training and testing subsets using an 80/20 ratio. The initial_split() function  ensures that the split is stratified by the diabetes variable—meaning the proportion of "Yes" and "No" cases is preserved in both subsets. The set.seed(10) ensures reproducibility of the split.
 ```
 
 
@@ -157,10 +160,10 @@ The main dataset has to be split into 70% for train data and 30% for test data. 
 ## Training and Testing Data 
 
 ```{r}
-train_data <- training(data_split)
+train_data <- training(data_split) #This line extracts the training subset from the data_split object created earlier using initial_split(). The result, train_data, contains 80% of the original dataset, with class proportions of the diabetes variable preserved due to stratification.
 
 
-test_data  <- testing(data_split)
+test_data  <- testing(data_split) #This code extracts the testing subset from the data_split object, assigning it to test_data. It contains the remaining 20% of the data, also stratified by the diabetes variable to preserve class distribution.
 
 ```
 
@@ -169,7 +172,7 @@ test_data  <- testing(data_split)
 ## Detecting core 
 
 ```{r}
-cores <- parallel::detectCores()
+cores <- parallel::detectCores()#This code detects the number of CPU cores available on the machine using the detectCores() function from the parallel package and stores that number in the cores variable.
 cores
 ```
 
@@ -188,7 +191,7 @@ mtry = NULL
 ```{r}
 rf_model_default <- rand_forest() %>% 
   set_engine("ranger", num.threads = cores) %>% 
-  set_mode("classification")
+  set_mode("classification")#This code initializes a Random Forest classification model using the ranger engine. It sets the number of processing threads to match the number of available CPU cores (num.threads = cores) to enable parallel computation. The model is explicitly set to perform classification using set_mode("classification").
 ```
 
 
@@ -206,14 +209,14 @@ rf_recipe_default <- recipe(diabetes ~ ., data = train_data) %>%
 ```{r}
 train_data_smote <- rf_recipe_default %>%
   prep() %>%
-  bake(new_data = NULL)
+  bake(new_data = NULL) #This code applies a pre-processing recipe (rf_recipe_default) to the training data. It first prepares the recipe using prep(), which estimates any required parameters (e.g., scaling, encoding, SMOTE), and then applies the transformations using bake(). Setting new_data = NULL means the transformations are applied to the training data itself.
 
 
 train_data_smote %>%
   count(diabetes) %>%
   ggplot(aes(x = diabetes, y = n, fill = diabetes)) +
   geom_col() +
-  ggtitle("Class Distribution After SMOTE")
+  ggtitle("Class Distribution After SMOTE") #This code visualizes the class distribution of the diabetes variable after applying SMOTE. It counts the number of observations in each class and uses a bar plot to show how many "Yes" and "No" cases are now present in train_data_smote.
 ```
 
 
@@ -223,7 +226,7 @@ train_data_smote %>%
 ```{r}
 rf_workflow_default <- workflow() %>% 
   add_recipe(rf_recipe_default) %>% 
-  add_model(rf_model_default)
+  add_model(rf_model_default) #This code creates a modeling workflow object named rf_workflow_default using the workflow() function from the workflows package. It adds two components: rf_recipe_default for pre-processing, and rf_model_default for the Random Forest classification model.
 
 rf_workflow_default
 ```
@@ -232,7 +235,7 @@ rf_workflow_default
 
 ```{r}
 rf_workflow_default_fit <- rf_workflow_default %>% 
-  fit(train_data)
+  fit(train_data) #This line fits the rf_workflow_default workflow to the train_data. It applies the preprocessing steps defined in the recipe and then trains the Random Forest model using the ranger engine on the processed data.
 ```
 
 
@@ -241,7 +244,7 @@ rf_workflow_default_fit <- rf_workflow_default %>%
 #### Class Prediction 
 
 ```{r}
-rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, type = "class")
+rf_predict_default <- predict(rf_workflow_default_fit, new_data = test_data, type = "class") #This line generates predictions from the trained Random Forest model (rf_workflow_default_fit) on the unseen test_data. The type = "class" argument specifies that the predicted output should be class labels (e.g., "Yes" or "No"), rather than probabilities.
 
 rf_predict_default %>% 
   head()
@@ -255,17 +258,17 @@ This is to predict the class of the test_data using the trained model. This is g
 
 ```{r}
 rf_default_roc <- predict(rf_workflow_default_fit, new_data = test_data, type = "prob") %>% 
-  bind_cols(test_data)
+  bind_cols(test_data) #This code generates class probability predictions from the fitted Random Forest model using type = "prob" and binds these probabilities to the original test_data using bind_cols(). The result, rf_default_roc, combines model outputs with actual labels for further evaluation (e.g., ROC curve, AUC).
 
 rf_default_roc %>% 
   select(.pred_No,.pred_Yes,diabetes) %>% 
-  glimpse()
+  glimpse() #This code selects the predicted probabilities for each class (.pred_No, .pred_Yes) and the actual diabetes labels from the rf_default_roc dataset. 
 ```
 
 The probability predictions gives in probability(out of 1), how likely a prediction is to be No or Yes. This predictions will be used for the ROC_CURVE later in the code
 
 
-### combining test data and predictions
+### Combining test data and predictions
 
 ```{r}
 
@@ -285,7 +288,7 @@ rf_predict_default %>%
 #### Calculating metrics 
 
 ```{r}
-c_matrix <- conf_mat(rf_predict_default, truth = diabetes, estimate = .pred_class)
+c_matrix <- conf_mat(rf_predict_default, truth = diabetes, estimate = .pred_class) #This line compute the confusion matrix using the conf_mat() function. It compares the predicted class labels (.pred_class) against the true labels (diabetes) in rf_predict_default.
 
 c_matrix
 ```
@@ -293,9 +296,9 @@ c_matrix
 The model predicts "No" well (high true negatives: 7470), but frequently misclassifies actual "Yes" cases, leading to many false negatives (557).
 
 ```{r}
-metrics <- metric_set(accuracy, sens, spec, precision)
+metrics <- metric_set(accuracy, sens, spec, precision)  #This code defines a set of evaluation metrics—accuracy, sensitivity (recall), specificity, and precision—using metric_set(). 
 
-met_default <- metrics(rf_predict_default, truth = diabetes, estimate = .pred_class)
+met_default <- metrics(rf_predict_default, truth = diabetes, estimate = .pred_class) #It then computes these metrics by comparing predicted labels (.pred_class) to the actual labels (diabetes) using the metrics() function.
 
 met_default
 
@@ -317,7 +320,7 @@ rf_default_prob <- rf_default_roc %>%
   mutate(pred_class = ifelse(.pred_Yes > 0.23, "Yes", "No")) %>% 
   mutate(pred_class = as.factor(pred_class)) %>% 
   mutate(pred_class = factor(pred_class,
-                             level = c("Yes", "No")))
+                             level = c("Yes", "No"))) #
 
 rf_default_prob %>% 
   head()
@@ -329,15 +332,17 @@ This output shows predicted probabilities (.pred_No, .pred_Yes) and predicted cl
 ## Evaluating model
 
 ```{r}
-con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
+con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class) #This code computes a confusion matrix using the manually thresholded predictions (pred_class) from rf_default_prob, comparing them against the actual diabetes labels.
 
 con_matrix
 ```
 
 ```{r}
-metrics <- metric_set(accuracy,sens,spec, precision)
+metrics <- metric_set(accuracy,sens,spec, precision) #This code defines a set of evaluation metrics—accuracy, sensitivity (recall), specificity, and precision—using metric_set(). 
 
-metrics_default <- metrics(rf_default_prob, truth = diabetes,estimate =  pred_class)
+
+metrics_default <- metrics(rf_default_prob, truth = diabetes,estimate =  pred_class) #It then computes these metrics by comparing predicted labels (.pred_class) to the actual labels (diabetes) using the metrics() function.
+
 
 metrics_default
 ```
@@ -367,7 +372,8 @@ This plot shows the trade-off between sensitivity (true positive rate) and 1 - s
 ```{r}
 rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
               set_engine("ranger", num.threads = cores) %>% 
-              set_mode("classification")
+              set_mode("classification") # This code defines a tunable Random Forest classification model with mtry, min_n, and trees as hyperparameters to be optimized. It uses the ranger engine for efficient training with parallel processing enabled via all available CPU cores. The model is set for classification tasks, such as predicting diabetes presence.
+
 ```
 
 
@@ -380,7 +386,8 @@ Here the hyperparameters are tuned to see the best value for each parameter that
 rf_recipe <- 
   recipe(diabetes ~ ., data = train_data) %>% 
   step_smotenc(diabetes,over_ratio = 0.50) %>% 
-  step_zv(all_predictors()) 
+  step_zv(all_predictors()) # This code creates a preprocessing recipe for modeling diabetes. It applies SMOTE for class balancing with an over-sampling ratio of 0.50 and removes predictors with zero variance. This prepares the data for more effective and stable Random Forest training.
+
 ```
 
 ### Building  a workflow
@@ -388,8 +395,7 @@ rf_recipe <-
 ```{r}
 rf_workflow <- 
         workflow() %>% 
-        add_model(rf_model) %>% 
-        add_recipe(rf_recipe)
+        add_model(rf_model) %>% # This code sets up a modeling workflow by combining the tunable Random Forest model and the preprocessing recipe. It ensures that data transformation and model training occur consistently within a single pipeline. This structure simplifies hyperparameter tuning and model evaluation.
 
 rf_workflow
 ```
@@ -401,22 +407,12 @@ set.seed(100)
 
 folds <- vfold_cv(train_data, v = 10) 
 
-rf_grid <- grid_regular(
-              mtry(range = c(1, 20)), 
-              min_n(range = c(5, 50)),
-              trees(range = c(1,100)),
-              levels = 4
-            )
-
-rf_grid
-
 
 rf_tune <- tune_grid(
                 rf_workflow,
                 resamples = folds,
-                grid = rf_grid, 
                 control = control_resamples(save_pred = TRUE, 
-                                                  verbose = FALSE))
+                                                  verbose = TRUE))
 
 rf_tune
 ```
@@ -425,7 +421,7 @@ rf_tune
 
 ```{r}
 tune_metrics <- rf_tune %>% 
-  collect_metrics()
+  collect_metrics() #This code collects performance metrics from the tuning results stored in rf_tune. The resulting tune_metrics includes evaluation scores (e.g., accuracy, ROC AUC) for each combination of hyperparameters tried during tuning. It is used to identify the best-performing model settings.
 
 tune_metrics %>% 
   head() # Displaying the first 6 rows of the tune metrics 
@@ -455,7 +451,7 @@ tune_long <- tune_metrics %>%
   pivot_longer(min_n:mtry,
     values_to = "value",
     names_to = "parameter"
-  ) 
+  ) #This code reshapes the tuning metrics into a long format for visualization. It selects the mean performance and hyperparameters (min_n, trees, mtry), then uses pivot_longer() to convert the hyperparameter columns into key-value pairs. This format is useful for comparing the effect of each parameter on model performance.
 
 tune_long %>%  
   head()
@@ -468,7 +464,7 @@ tune_long %>%
 ggplot( tune_long, aes(value, mean, color = parameter)) +
   geom_point(show.legend = FALSE) +
   facet_wrap(~parameter, scales = "free_x") +
-  labs(x = NULL, y = "Accuracy")
+  labs(x = NULL, y = "Accuracy") #This code creates a faceted scatter plot to visualize how each hyperparameter (mtry, min_n, trees) influences model accuracy. Each facet displays the relationship between one parameter and the model's mean accuracy, helping identify which settings yield the best performance. The plot aids in selecting optimal tuning values.
 ```
 
 
@@ -480,7 +476,7 @@ From the plot, the best tuned model will have mtry between one and 15, min_n of 
 ```{r}
 rf_best <- 
   rf_tune %>% 
-  select_best(metric = "accuracy")
+  select_best(metric = "accuracy") # Filtering accuracy to make it easy to compare hyperparameter values
 
 rf_best  # we know the best model has 1 mtry and 50 min_n
 ```
@@ -490,7 +486,7 @@ The best model is preprocessor1_model41 because it has the best hyperparameters 
 ### Finalizing the best model 
 
 ```{r}
-final_rf_model <- finalize_model(rf_model, rf_best)
+final_rf_model <- finalize_model(rf_model, rf_best) #This code finalizes the Random Forest model by applying the best hyperparameters (rf_best) found during tuning. The resulting final_rf_model is ready for training on the full dataset or for evaluation, using the optimal configuration for performance.
 ```
 
 ### Creating final workflow
@@ -498,14 +494,14 @@ final_rf_model <- finalize_model(rf_model, rf_best)
 ```{r}
 rf_workflow_final <- workflow() %>% 
   add_model(final_rf_model) %>% 
-  add_recipe(rf_recipe) 
+  add_recipe(rf_recipe) #This code builds the final modeling workflow by combining the tuned Random Forest model (final_rf_model) with the preprocessing recipe (rf_recipe). It ensures consistent data preparation and model application using the best hyperparameter settings for final training and evaluation.
 ```
 
 ### Training the final Model 
 
 ```{r}
 rf_workflow_final_fit <- rf_workflow_final %>% 
-  fit(train_data)
+  fit(train_data) #This code fits the finalized workflow to the training data. It applies all preprocessing steps and trains the tuned Random Forest model on train_data, producing a fully trained model ready for prediction and final evaluation.
 
 rf_workflow_final_fit
 ```
@@ -516,10 +512,10 @@ rf_workflow_final_fit
 
 ```{r}
 final_model_predict <- predict(rf_workflow_final_fit,new_data = test_data) %>% 
-  bind_cols(test_data)
+  bind_cols(test_data) #This code makes class predictions on the test_data using the finalized Random Forest model and then binds these predictions with the original test set. The result, final_model_predict, contains both the predicted and actual diabetes labels, enabling evaluation of model accuracy, sensitivity, and other metrics.
 
 final_model_predict<- final_model_predict  %>%
-  select(.pred_class, diabetes)
+  select(.pred_class, diabetes) #This code refines the final_model_predict dataframe to keep only two columns: the predicted class labels (.pred_class) and the actual labels (diabetes). This streamlined format is ideal for computing evaluation metrics like accuracy, confusion matrix, sensitivity, and specificity.
 
 final_model_predict %>% 
   glimpse()
@@ -530,7 +526,7 @@ final_model_predict %>%
 
 ```{r}
 rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "prob") %>% 
-  bind_cols(test_data)
+  bind_cols(test_data) #This code generates predicted class probabilities from the finalized Random Forest model for the test_data, specifying type = "prob". These probabilities are then combined with the original test data, resulting in rf_tuned_roc, which is ready for ROC curve plotting and AUC evaluation.
 ```
 
 
@@ -542,7 +538,7 @@ rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "pr
 
 ```{r}
 conf_mat(final_model_predict, truth = diabetes,
-         estimate = .pred_class)
+         estimate = .pred_class) #This code computes the confusion matrix by comparing the predicted diabetes classes (.pred_class) to the actual labels (diabetes) in final_model_predict. The output shows how many cases were correctly or incorrectly classified, providing insight into model performance across true positives, true negatives, false positives, and false negatives.
 ```
 
 We can see the model is predicting less true positives resulting in more false positives where as there is higher predicition of true negatives and less false positive.
@@ -552,7 +548,7 @@ We can see the model is predicting less true positives resulting in more false p
 ```{r}
 metrics <- metric_set(accuracy, sens, spec, precision)
 metrics_tune <- metrics(final_model_predict, truth = diabetes,
-         estimate = .pred_class)
+         estimate = .pred_class)  #This code defines a set of evaluation metrics—accuracy, sensitivity, specificity, and precision—and calculates them using the predicted and actual diabetes labels in final_model_predict. The resulting metrics_tune provides a concise performance summary of the finalized Random Forest model on unseen data.
 ```
 
 The RF tuned model has a very high accuracy of 92 % 
@@ -572,7 +568,7 @@ final_rf_model %>%
   set_engine("ranger", importance = "permutation") %>%
   fit(diabetes ~ .,
     data = juice(tree_prep)) %>%
-  vip(geom = "point")
+  vip(geom = "point")  #This code fits the final Random Forest model using permutation-based variable importance on the preprocessed training data. It extracts the most influential predictors for diabetes classification. The vip plot visually ranks these variables based on their contribution to model performance.
 ```
 
 The plot you above depicts Permutation Feature Importance, which indicates variables that had the largest influence on predicting diabetes in the random forest model.Higher significance scores indicate that the predictor has a considerable influence on the model's accuracy. The variables at the top of the graph (DIS_HBP_EVER, HS_GEN_HEALTH, and DIS_ENDO_HB_CHOL_EVER) are the most important for predicting diabetes.
@@ -582,7 +578,7 @@ The plot you above depicts Permutation Feature Importance, which indicates varia
 ```{r}
 roc_curves_tuned  <- rf_tuned_roc %>%
   yardstick::roc_curve(truth = diabetes, .pred_Yes) %>% 
-  autoplot()
+  autoplot()  #This code generates and plots the ROC curve for the tuned Random Forest model using the predicted probabilities of the "Yes" class. It evaluates how well the model distinguishes between diabetes and non-diabetes cases across thresholds. The resulting plot visually summarizes the model’s classification performance.
 
 roc_curves_tuned
 ```
@@ -593,7 +589,7 @@ The ROC curve reveals that the model classifies considerably between diabetes an
 # **Correcting low sensitivity**
 
 ```{r}
-metrics_tune
+metrics_tune # this is the metrics estimates for the tuned RF model
 ```
 
 
@@ -619,7 +615,7 @@ The code above is to reduce the threshold for predicting Yes from 0.5 to 0.30 to
 ## Evaluating model
 
 ```{r}
-con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
+con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class) #This code computes the confusion matrix by comparing the predicted diabetes classes (.pred_class) to the actual labels (diabetes) in final_model_predict. The output shows how many cases were correctly or incorrectly classified, providing insight into model performance across true positives, true negatives, false positives, and false negatives.
 
 con_matrix
 ```
@@ -642,7 +638,7 @@ metrics_tuned
 
 ```{r}
 metric_default <- met_default %>% 
-  mutate(name = "Rf_Default")
+  mutate(name = "Rf_Default")  #Adding label to the RF model with default hyperparameters
 
 metric_default %>%  
   glimpse()
@@ -650,7 +646,7 @@ metric_default %>%
 ```
 ```{r}
 metric_tuned <- metrics_tune %>% 
-  mutate(name = "Rf_Tuned")
+  mutate(name = "Rf_Tuned")  #Adding label to the RF model with tuned hyperparameters
 
 metric_tuned %>%  
   glimpse()
@@ -658,8 +654,10 @@ metric_tuned %>%
 
 ### Binding metrics 
 
+Because each dataframe has the same variables, I can bind the rows to get a single dataset with metrics for the default and tuned RF model. This will help with visualization
+
 ```{r}
-metric_eval <- bind_rows(metric_default, metric_tuned)
+metric_eval <- bind_rows(metric_default, metric_tuned)  
 
 metric_eval %>% 
   glimpse()
@@ -728,16 +726,16 @@ After reducing the threshold for prediciting Yes, the overal accuracy reduced bu
 
 ```{r}
 rf_default_roc <- rf_default_roc %>% 
-  mutate(name = "Rf_Default")
+  mutate(name = "Rf_Default") #This code adds a new column name to the rf_default_roc dataset, labeling all rows with "Rf_Default". This is useful for comparing multiple models (default vs. tuned) by tagging their outputs for grouped evaluation or combined plotting.
 
 rf_default_prob <- rf_default_prob %>% 
-  mutate(name = "Rf_Tuned")
+  mutate(name = "Rf_Tuned") #This code adds a new column name to the rf_default_roc dataset, labeling all rows with "Rf_Default". This is useful for comparing multiple models (default vs. tuned) by tagging their outputs for grouped evaluation or combined plotting.
 
-eval_roc <- bind_rows(rf_default_prob, rf_default_roc)
+eval_roc <- bind_rows(rf_default_prob, rf_default_roc) #This code combines the default probability predictions (rf_default_prob) and the original default ROC data (rf_default_roc) into one dataset called eval_roc.
 
 
 eval_roc <- eval_roc %>%  
-  select(name,.pred_No,.pred_Yes,diabetes)
+  select(name,.pred_No,.pred_Yes,diabetes)  # It then selects only the relevant columns—model name, predicted probabilities, and actual diabetes labels—preparing the data for comparative ROC analysis between model versions.
 
 
 eval_roc %>% 
@@ -749,7 +747,7 @@ curve <- eval_roc %>%
   group_by(name) %>% 
   roc_curve(truth = diabetes, .pred_Yes) %>% 
   autoplot() +
-  aes(color = name)
+  aes(color = name)  #This code plots ROC curves for multiple models grouped by the name column in eval_roc. It shows how each model performs across different thresholds using the true labels and predicted probabilities for the "Yes" class. The resulting plot compares classification performance visually, with each curve colored by model name.
 
 curve
 
