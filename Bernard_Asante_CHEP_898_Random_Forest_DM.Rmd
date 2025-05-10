@@ -468,7 +468,7 @@ ggplot( tune_long, aes(value, mean, color = parameter)) +
 ```
 
 
-From the plot, the best tuned model will have mtry between one and 15, min_n of around 5  and trees of 100 
+From the plot, the best tuned model will have mtry between one and 15, min_n of around 21  and trees of 1800 
 
 
 ### Selecting best tuned model 
@@ -481,7 +481,7 @@ rf_best <-
 rf_best  # we know the best model has 1 mtry and 50 min_n
 ```
 
-The best model is preprocessor1_model41 because it has the best hyperparameters values as seen on the plot. mtry 1,trees = 67  and  min_n of 35.
+The best model is preprocessor1_model05 because it has the best hyperparameters values as seen on the plot. mtry 8,trees = 1840  and  min_n of 21.
 
 ### Finalizing the best model 
 
@@ -527,6 +527,9 @@ final_model_predict %>%
 ```{r}
 rf_tuned_roc <- predict(rf_workflow_final_fit , new_data = test_data, type = "prob") %>% 
   bind_cols(test_data) #This code generates predicted class probabilities from the finalized Random Forest model for the test_data, specifying type = "prob". These probabilities are then combined with the original test data, resulting in rf_tuned_roc, which is ready for ROC curve plotting and AUC evaluation.
+
+rf_tuned_roc %>% 
+  glimpse()
 ```
 
 
@@ -551,7 +554,6 @@ metrics_tune <- metrics(final_model_predict, truth = diabetes,
          estimate = .pred_class)  #This code defines a set of evaluation metrics—accuracy, sensitivity, specificity, and precision—and calculates them using the predicted and actual diabetes labels in final_model_predict. The resulting metrics_tune provides a concise performance summary of the finalized Random Forest model on unseen data.
 ```
 
-The RF tuned model has a very high accuracy of 92 % 
 
 ```{r}
 metrics_tune
@@ -684,6 +686,7 @@ Accuracy and specificity relatively improved after tuning comapred to default hy
 metrics_default
 metrics_tuned
 ```
+
 ### Labeling metrics 
 
 ```{r}
@@ -753,4 +756,4 @@ curve
 
 ```
 
-From the ROC_CURVE, the area under the curve for the default is bigger compared to the tuned model. This means the default model had better overall prediction ability compared to the tuned model. 
+From the ROC_CURVE, the area under the curve for the tuned  is bigger compared to the default hyperparameter model. This means the tuned model had better overall prediction ability compared to the default model. 
