@@ -723,7 +723,7 @@ ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name ))+
        subtitle = "Threshold ~ adjusted")
 ```
 
-After reducing the threshold for prediciting Yes, the overal accuracy reduced but sensitivity and specificity achieved considerable increase compared to when default threshold of 0.5 was used.
+After reducing the threshold for predicting Yes, the overal accuracy was higher for tuned model but sensitivity and specificity achieved considerable increase compared to when default threshold of 0.5 was used.
 
 ## **Comparing RoC Curve**
 
