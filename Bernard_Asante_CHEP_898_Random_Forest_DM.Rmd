@@ -606,7 +606,7 @@ rf_default_prob <- rf_tuned_roc %>%
   mutate(pred_class = ifelse(.pred_Yes > 0.30, "Yes", "No")) %>% 
   mutate(pred_class = as.factor(pred_class)) %>% 
   mutate(pred_class = factor(pred_class,
-                             level = c("Yes", "No")))
+                             level = c("Yes", "No")))  # Trhis code is to reduce the threshold from 0.5 to prediciting yes if the probabilty is >0.30. this idea to help better classification of true positives. 
 
 rf_default_prob %>% 
   head()
@@ -656,9 +656,11 @@ metric_tuned %>%
 
 ### Binding metrics 
 
-Because each dataframe has the same variables, I can bind the rows to get a single dataset with metrics for the default and tuned RF model. This will help with visualization
+
 
 ```{r}
+# Because each dataframe has the same variables, I can bind the rows to get a single dataset with metrics for the default and tuned RF model. This will help with visualization
+
 metric_eval <- bind_rows(metric_default, metric_tuned)  
 
 metric_eval %>% 
@@ -671,7 +673,7 @@ metric_eval %>%
 ggplot(data = metric_eval, aes(x = .metric, y = .estimate, fill = name ))+
   geom_col(position = "dodge")+
   labs(title = "Barplot comparing tuned and default hyperparamter models",
-       subtitle = "Threshold ~ 0.5")
+       subtitle = "Threshold ~ 0.5")  # This model is to compare the metrics of tuned and default hyperparameter RF model. 
 ```
 
 Accuracy and specificity relatively improved after tuning comapred to default hyperameters however, tuning does not improve sensitivity and precision of the model. 
@@ -683,15 +685,16 @@ Accuracy and specificity relatively improved after tuning comapred to default hy
 ### Labeling metrics 
 
 ```{r}
-metrics_default
-metrics_tuned
+metrics_default  # This si the metrics from the default hyperparameter RF model 
+
+metrics_tuned   #This line of code represents metrics for the tuned RF model  
 ```
 
 ### Labeling metrics 
 
 ```{r}
 metrics_default <- metrics_default %>% 
-  mutate(name = "Rf_Default")
+  mutate(name = "Rf_Default")  # This line of code add label or a actegorical variable to help deifferentiate default metrics from the tuned model 
 
 metrics_default %>%  
   glimpse()
@@ -699,7 +702,7 @@ metrics_default %>%
 ```
 ```{r}
 metrics_tuned <- metrics_tuned %>% 
-  mutate(name = "Rf_Tuned")
+  mutate(name = "Rf_Tuned") # This code adds a label or name to identify tuned metrics in the anlaysis and visualizations 
 
 metrics_tuned %>%  
   glimpse()
@@ -707,7 +710,7 @@ metrics_tuned %>%
 ### Binding metrics 
 
 ```{r}
-metrics_eval <- bind_rows(metrics_default, metrics_tuned)
+metrics_eval <- bind_rows(metrics_default, metrics_tuned)  # This code is to bind the metrics datastes using rows since they have the same variables 
 
 metrics_eval %>% 
   glimpse()
@@ -720,7 +723,7 @@ ggplot(data = metrics_eval, aes(x = .metric, y = .estimate, fill = name ))+
   geom_col(position = "dodge")+
   geom_col(position = "dodge")+
   labs(title = "Barplot comparing tuned and default hyperparamter models",
-       subtitle = "Threshold ~ adjusted")
+       subtitle = "Threshold ~ adjusted")  # This code generates a plot comparing the metrics of the tuned and default hyperparametrs 
 ```
 
 After reducing the threshold for predicting Yes, the overal accuracy was higher for tuned model but sensitivity and specificity achieved considerable increase compared to when default threshold of 0.5 was used.
