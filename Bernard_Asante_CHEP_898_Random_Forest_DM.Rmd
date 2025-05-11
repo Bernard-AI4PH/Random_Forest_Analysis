@@ -38,7 +38,7 @@ library(pROC)
 # **Reading in data**
 
 ```{r}
-data <- read_csv("mice_all_imp.csv")
+data <- read_csv("mice_all_imp.csv") 
 ```
 
 ## Converting variables to factor
@@ -65,20 +65,21 @@ From the data dictionary, DIS_DIAB_EVER DICTIONARY has 3 responses:
 2 - "Presumed-Never had diabetes"
 
 ```{r}
-table(data$DIS_DIAB_EVER)
+table(data$DIS_DIAB_EVER) # This code displays the counts of the 0,1 and 2 responses in the DIS_DIAB_EVER variable
 ```
- From the can path dataset dictionary, 0 and 2 can be assumed to mean response for not having diabetes. I want to recode them into binary(dichotomous variable) where 0 and 2 will be recoded as "No" and 1 recoded as "Yes"
  
-
 ## Recoding Predictor variable 
 
+
 ```{r}
+#From the can path dataset dictionary, 0 and 2 can be assumed to mean response for not having diabetes. I want to recode them into binary(dichotomous variable) where 0 and 2 will be recoded as "No" and 1 recoded as "Yes"
+
 data <- data %>%
 	mutate(diabetes = case_when(
 		DIS_DIAB_EVER == 0 ~ "No",
 		DIS_DIAB_EVER == 1 ~ "Yes",
 		DIS_DIAB_EVER == 2 ~ "No")) %>%
-		mutate(diabetes = as.factor(diabetes))
+		mutate(diabetes = as.factor(diabetes)) 
 ```
 
 
@@ -106,7 +107,7 @@ I will have to factor the level to make "Yes" at level one or reference in logis
 
 data <- data %>% 
   mutate(diabetes = factor(diabetes,
-                           levels = c("Yes", "No"))) # This code reorders the factor levels of the diabetes variable, setting "Yes" as the reference level (i.e., the first level). 
+                           levels = c("Yes", "No"))) # This code reorders the factor levels of the diabetes variable, setting "Yes" as the reference level. 
 data$diabetes %>% 
   summary()
 ```
@@ -336,6 +337,10 @@ con_matrix <- conf_mat(rf_default_prob, truth = diabetes, estimate = pred_class)
 
 con_matrix
 ```
+## Defining Metrics_Sets
+
+Here I will decide on metrics to evaluate the model. The metrics used in the analysis are; Accuracy, sensitivity, specificity and precision. Accuracy measures overall correctness; sensitivity detects actual positives; specificity identifies actual negatives; precision evaluates correctness of positive predictions.
+They can be calculated from the confusion metrics but in this code, I will be using the metric_set function. 
 
 ```{r}
 metrics <- metric_set(accuracy,sens,spec, precision) #This code defines a set of evaluation metrics—accuracy, sensitivity (recall), specificity, and precision—using metric_set(). 
@@ -634,11 +639,16 @@ metrics_tuned
 
 # **Model Comparison**
 
+After applying the metric_set function to the predicted values, I saved the variables as metric_default and metric_tuned for the default and tuned RF model respectively. These variables will be used for the model comparison. 
+
 ## Using default threshold(0.5)
 
 ### Labeling metrics 
 
+
+
 ```{r}
+
 metric_default <- met_default %>% 
   mutate(name = "Rf_Default")  #Adding label to the RF model with default hyperparameters
 
