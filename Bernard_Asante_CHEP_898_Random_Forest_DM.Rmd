@@ -398,9 +398,10 @@ rf_recipe <-
 ### Building  a workflow
 
 ```{r}
-rf_workflow <- 
-        workflow() %>% 
-        add_model(rf_model) %>% # This code sets up a modeling workflow by combining the tunable Random Forest model and the preprocessing recipe. It ensures that data transformation and model training occur consistently within a single pipeline. This structure simplifies hyperparameter tuning and model evaluation.
+rf_workflow <- workflow() %>% 
+  add_model(rf_model) %>%
+  add_recipe(rf_recipe)
+  # This code sets up a modeling workflow by combining the tunable Random Forest model and the preprocessing recipe. It ensures that data transformation and model training occur consistently within a single pipeline. This structure simplifies hyperparameter tuning and model evaluation.
 
 rf_workflow
 ```
@@ -417,7 +418,7 @@ rf_tune <- tune_grid(
                 rf_workflow,
                 resamples = folds,
                 control = control_resamples(save_pred = TRUE, 
-                                                  verbose = TRUE))
+                                                  verbose = FALSE))
 
 rf_tune
 ```
